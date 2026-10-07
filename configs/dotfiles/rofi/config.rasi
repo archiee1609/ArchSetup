@@ -1,0 +1,92 @@
+/**
+ * Rofi Configuration
+ * Minimalist dark theme for Qtile and BSPWM environments
+ **/
+
+configuration {
+    modi: "drun,run,window";
+    font: "JetBrainsMono Nerd Font 10";
+    show-icons: true;
+    icon-theme: "Papirus";
+    terminal: "kitty";
+    drun-display-format: "{name}";
+    disable-history: false;
+    sidebar-mode: false;
+}
+
+@theme "/dev/null"
+
+* {
+    bg: #1e1e2e;
+    bg-alt: #313244;
+    fg: #cdd6f4;
+    fg-alt: #a6adc8;
+    accent: #89b4fa;
+    border-col: #45475a;
+
+    background-color: transparent;
+    text-color: @fg;
+    margin: 0;
+    padding: 0;
+}
+
+window {
+    transparency: "real";
+    background-color: @bg;
+    border: 2px solid;
+    border-color: @border-col;
+    border-radius: 8px;
+    width: 640px;
+    padding: 16px;
+}
+
+inputbar {
+    background-color: @bg-alt;
+    border-radius: 6px;
+    padding: 8px 12px;
+    children: [ prompt, entry ];
+    margin: 0 0 12px 0;
+}
+
+prompt {
+    text-color: @accent;
+    padding: 0 8px 0 0;
+}
+
+entry {
+    placeholder: "Type to search...";
+    placeholder-color: @fg-alt;
+    text-color: @fg;
+}
+
+listview {
+    columns: 1;
+    lines: 8;
+    scrollbar: false;
+    spacing: 4px;
+}
+
+element {
+    padding: 8px 12px;
+    border-radius: 6px;
+}
+
+element normal.normal {
+    background-color: transparent;
+    text-color: @fg;
+}
+
+element selected.normal {
+    background-color: @accent;
+    text-color: #11111b;
+}
+
+element-icon {
+    size: 20px;
+    margin: 0 10px 0 0;
+}
+
+element-text {
+    vertical-align: 0.5;
+    text-color: inherit;
+}

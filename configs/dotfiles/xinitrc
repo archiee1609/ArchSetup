@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# ~/.xinitrc
+# Fallback launcher if not using display manager
+
+userresources=$HOME/.Xresources
+usermodmap=$HOME/.Xmodmap
+
+if [ -f "$userresources" ]; then
+    xrdb -merge "$userresources"
+fi
+
+if [ -f "$usermodmap" ]; then
+    xmodmap "$usermodmap"
+fi
+
+# Start session based on selection or fallback
+session=${1:-qtile}
+
+case $session in
+    qtile)
+        exec qtile start
+        ;;
+    bspwm)
+        exec bspwm
+        ;;
+    *)
+        exec qtile start
+        ;;
+esac

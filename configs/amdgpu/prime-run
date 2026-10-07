@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# prime-run: PRIME Render Offload Wrapper for AMD Radeon R5 M330 (Oland)
+# ==============================================================================
+# Executes OpenGL and Vulkan applications using the discrete AMD GPU instead
+# of the integrated Intel UHD 620.
+
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+    cat <<EOF
+Usage: $(basename "$0") <application> [arguments...]
+
+Runs the given application on the discrete AMD Radeon GPU using DRI_PRIME=1.
+
+Examples:
+  $(basename "$0") glxinfo -B
+  $(basename "$0") vkcube
+  $(basename "$0") steam
+EOF
+    exit 1
+fi
+
+# Enable DRI PRIME offload for Mesa OpenGL and RADV Vulkan
+export DRI_PRIME=1
+
+# Execute target command
+exec "$@"

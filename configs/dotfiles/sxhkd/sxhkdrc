@@ -1,0 +1,81 @@
+# ==============================================================================
+# SXHKD Keybindings for BSPWM
+# ==============================================================================
+
+# Launch Terminal
+super + Return
+    kitty
+
+# Application Launcher
+super + d
+    rofi -show drun
+
+super + r
+    rofi -show run
+
+# Hardware Audio (WirePlumber / PipeWire)
+XF86AudioRaiseVolume
+    wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+
+XF86AudioLowerVolume
+    wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+
+XF86AudioMute
+    wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+
+# Hardware Brightness (brightnessctl)
+XF86MonBrightnessUp
+    brightnessctl set +5%
+
+XF86MonBrightnessDown
+    brightnessctl set 5%-
+
+# Window Management
+super + q
+    bspc node -c
+
+super + t
+    bspc node -t tiled
+
+super + shift + space
+    bspc node -t ~floating
+
+super + f
+    bspc node -t ~fullscreen
+
+# Reload BSPWM / SXHKD
+super + control + r
+    pkill -USR1 -x sxhkd; bspc wm -r
+
+super + control + q
+    bspc quit
+
+# Window Focus
+super + {h,j,k,l}
+    bspc node -f {west,south,north,east}
+
+super + {Left,Down,Up,Right}
+    bspc node -f {west,south,north,east}
+
+# Swap Windows
+super + shift + {h,j,k,l}
+    bspc node -s {west,south,north,east}
+
+super + shift + {Left,Down,Up,Right}
+    bspc node -s {west,south,north,east}
+
+# Switch Workspaces
+super + {1-6}
+    bspc desktop -f '^{1-6}'
+
+# Move Focused Window to Workspace
+super + shift + {1-6}
+    bspc node -d '^{1-6}' --follow
+
+# Preselect Direction
+super + ctrl + {h,j,k,l}
+    bspc node -p {west,south,north,east}
+
+# Cancel Preselection
+super + ctrl + space
+    bspc node -p cancel

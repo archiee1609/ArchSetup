@@ -1,0 +1,25 @@
+# GRUB configuration for Intel Kaby Lake-R + AMD Oland (GCN 1.0) dGPU
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=5
+GRUB_DISTRIBUTOR="Arch"
+
+# Kernel parameters:
+# - loglevel=3 quiet : Clean boot output
+# - radeon.si_support=0 amdgpu.si_support=1 : Route Southern Islands (Oland / R5 M330) to amdgpu driver
+# - radeon.cik_support=0 amdgpu.cik_support=1 : Sea Islands support safeguard
+GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet radeon.si_support=0 radeon.cik_support=0 amdgpu.si_support=1 amdgpu.cik_support=1"
+GRUB_CMDLINE_LINUX=""
+
+# Preload Btrfs module
+GRUB_PRELOAD_MODULES="part_gpt part_msdos btrfs"
+
+# Terminal configuration
+GRUB_TERMINAL_INPUT="console"
+GRUB_GFXMODE="auto"
+GRUB_GFXPAYLOAD_LINUX="keep"
+
+# Disable submenus for cleaner snapshot listing with grub-btrfs
+GRUB_DISABLE_SUBMENU=y
+
+# Disable OS prober by default
+GRUB_DISABLE_OS_PROBER=true
