@@ -19,6 +19,7 @@ Before performing any destructive disk operations, the installer executes a comp
 | **Storage & Disks** | `lsblk` enumeration (excludes live USB installer media, loops, and RAM disks) | **Single-Disk**: 1 GB EFI partition (`vfat` -> `/boot`) + Btrfs root subvolumes (`@`, `@home`, etc.).<br>**Multi-Disk (2+ Drives)**: Automated striped pool (`raid0`), linear span (`single`), or separate `/data` drive.<br>**Media Adaptation**: Enables `discard=async` for SSDs/NVMe; automatically omits discard on rotational HDDs. |
 | **GPU & Graphics** | PCI display devices scanned via `lspci` (`0300`, `0302`, `0380`) | **Intel iGPU**: `mesa`, `vulkan-intel`, `intel-media-driver`, Early KMS `i915`.<br>**AMD APU/dGPU**: `vulkan-radeon`, `amdgpu`. Legacy GCN 1.0/2.0 cards automatically receive SI/CIK flags.<br>**NVIDIA**: `nvidia-dkms`, `nvidia-utils`, Early KMS `nvidia`, `nvidia_drm.modeset=1`.<br>**Hybrid GPUs**: Deploys tailored `/usr/local/bin/prime-run` wrapper (AMD `DRI_PRIME=1` or NVIDIA offload).<br>**VMs**: Installs `virtualbox-guest-utils`, `open-vm-tools`, or `qemu-guest-agent`. |
 | **Status Bar (Polybar)** | Verifies `/sys/class/power_supply/` | Adapts battery widget to actual battery name (`BAT0`/`BAT1`) and AC adapter (`AC`/`ADP1`). Cleanly strips battery module on desktops and VMs. |
+| **Display & Desktop Stack** | Configuration & Provisioning Engine | **Display Manager**: `lightdm` + `lightdm-gtk-greeter` (configured to launch `bspwm`).<br>**Default Software Stack**: Firefox browser, VLC media player, Neovim (CLI) & Mousepad (GUI), Google Antigravity CLI (`antigravity-cli`). |
 
 ---
 
@@ -134,7 +135,45 @@ prime-run steam
 
 ---
 
-## 5. Step-by-Step Installation Guide
+## 5. Package Management, Chaotic-AUR & Paru
+
+The installer automates modern repository enhancements and AUR tooling:
+
+### 1. Multilib Repository
+- Enables the official `[multilib]` repository in `/etc/pacman.conf` to provide 32-bit libraries required for Steam, Wine, gaming runtimes, and 32-bit graphics acceleration drivers (`lib32-mesa`, `lib32-vulkan-*`).
+
+### 2. Chaotic-AUR Automated Integration
+- Automatically imports and signs the Chaotic-AUR primary signing key (`3056513887B78AEB`).
+- Installs `chaotic-keyring` and `chaotic-mirrorlist`.
+- Configures `[chaotic-aur]` in `/etc/pacman.conf`.
+- **Benefit**: Provides direct access to thousands of pre-compiled AUR packages (binaries), drastically speeding up installations without needing to compile large packages from source (e.g. kernels, browsers, utilities).
+
+### 3. Paru AUR Helper
+- Installs **`paru`** out of the box via Chaotic-AUR binary packages (with a fallback build via non-root `makepkg` if offline).
+- Seamless pacman wrapper with interactive package selection, AUR updates, and syntax highlighting.
+```bash
+# Search and install any official or AUR package:
+paru <package_name>
+
+# Perform full system upgrade (including AUR packages):
+paru -Syu
+```
+
+### 4. Default Software Stack
+The installer equips the system with an idiomatic, curated software stack ready on first boot:
+1. **Web Browser (`firefox`)**: Up-to-date Firefox browser with hardware-accelerated rendering.
+2. **Developer Agent Orchestration (`antigravity-cli`)**: TUI orchestration tool for Google Antigravity, installed directly via Chaotic-AUR or built via Paru / AUR fallback. Available via `antigravity-cli` or `agy`.
+3. **Text Editors (`neovim` & `mousepad`)**:
+   - **CLI**: `neovim` configured as the system default (`$EDITOR` and `$VISUAL` in `/etc/profile.d/editor.sh`), along with base `nano` and `vim`.
+   - **GUI**: `mousepad`, a lightweight GTK text editor cleanly integrated with BSPWM.
+4. **Display Manager (`lightdm` + `lightdm-gtk-greeter`)**:
+   - Replaces SDDM with a lightweight, dependable display manager and clean GTK greeter.
+   - Pre-configured with session autodetect pointing directly to `bspwm`.
+5. **Media Player (`vlc`)**: Full-featured media player with comprehensive codec support out of the box.
+
+---
+
+## 6. Step-by-Step Installation Guide
 
 ### Step 1: Boot the Arch Linux Live ISO
 1. Boot the target machine using the official Arch Linux Live ISO in **UEFI mode**.
@@ -164,9 +203,14 @@ Key configurable parameters:
 - `USERNAME` (default: `archie`)
 - `TIMEZONE` (default: `UTC`)
 - `LOCALE` (default: `en_US.UTF-8`)
+- `ENABLE_MULTILIB` (default: `true`)
+- `ENABLE_CHAOTIC_AUR` (default: `true`)
+- `INSTALL_PARU` (default: `true`)
 - `WM` (default: `bspwm`)
 - `TERMINAL` (`kitty` or `alacritty`)
-- `DISPLAY_MANAGER` (`sddm` or `none`)
+- `DISPLAY_MANAGER` (`lightdm` or `none`)
+- `TEXT_EDITOR` (default: `neovim`)
+- `INSTALL_ANTIGRAVITY_CLI` (default: `true`)
 - `DISK1` / `DISK2` / `BTRFS_MODE` (only needed if overriding auto-detection)
 
 ### Step 4: Validate with Dry-Run Simulation (Recommended)
@@ -212,6 +256,9 @@ The installer will probe your hardware, present the auto-detected hardware profi
   Graphics Architecture:  intel-amd-hybrid
   Early KMS Modules:      i915 amdgpu
   PRIME Offloading:       amd
+  Multilib Repository:    Enabled
+  Chaotic-AUR:            Enabled
+  AUR Helper:             paru
   Power & Thermal Plan:   TLP (intel_pstate) + thermald thermal mitigation
 ======================================================================
 ```
@@ -228,7 +275,7 @@ Remove your live USB installer when prompted.
 
 ---
 
-## 6. Post-Installation Verification
+## 7. Post-Installation Verification
 
 ### 1. Verify Btrfs Subvolumes & Storage Layout
 ```bash
@@ -266,16 +313,59 @@ sudo tlp-stat -p
 systemctl status thermald
 ```
 
-### 5. Snapshot Booting with `grub-btrfs`
+### 5. Verify Multilib & Chaotic-AUR Repositories
+```bash
+# Verify multilib packages are available:
+pacman -Sl multilib | head -n 5
+
+# Verify Chaotic-AUR binary packages are available:
+pacman -Sl chaotic-aur | head -n 5
+```
+
+### 6. Verify Paru AUR Helper
+```bash
+# Verify paru is functional:
+paru --version
+paru -Syu
+```
+
+### 7. Snapshot Booting with `grub-btrfs`
 Whenever a snapshot of the `@` subvolume is created in `/.snapshots/` (e.g. via `snapper` or `btrfs subvolume snapshot`), `grub-btrfsd.service` automatically regenerates `/boot/grub/grub.cfg`, allowing you to boot directly into previous system snapshots from the GRUB boot menu.
+
+### 8. Verify Display Manager (LightDM)
+```bash
+# Check LightDM display manager service status:
+systemctl status lightdm.service
+
+# Verify GTK greeter and BSPWM session configuration:
+grep -E "greeter-session|user-session" /etc/lightdm/lightdm.conf
+cat /usr/share/xsessions/bspwm.desktop
+```
+
+### 9. Verify Default Software Applications
+```bash
+# Verify Firefox browser:
+firefox --version
+
+# Verify VLC media player:
+vlc --version
+
+# Verify Neovim and Mousepad text editors:
+nvim --version
+mousepad --version
+echo "System Editor: $EDITOR | Visual Editor: $VISUAL"
+
+# Verify Antigravity CLI agent orchestration tool:
+antigravity-cli --version || agy --version
+```
 
 ---
 
-## 7. Keybindings Quick Reference
+## 8. Keybindings Quick Reference
 
 ### BSPWM (`sxhkd`)
 - `Super + Return`: Launch terminal (`kitty` / `alacritty`)
-- `Super + d`: Application launcher (`rofi` drun mode)
+- `Super + d`: Application launcher (`rofi` drun mode — launch Firefox, VLC, Mousepad, etc.)
 - `Super + r`: Command runner (`rofi` run mode)
 - `Super + q`: Close focused window
 - `Super + t`: Set window state to tiled
@@ -291,3 +381,14 @@ Whenever a snapshot of the `@` subvolume is created in `/.snapshots/` (e.g. via 
 - `Super + Ctrl + q`: Quit BSPWM session
 - `XF86AudioRaiseVolume / LowerVolume / Mute`: Audio volume controls (WirePlumber / PipeWire)
 - `XF86MonBrightnessUp / Down`: Display brightness controls (`brightnessctl`)
+
+### Default Applications Quick Launch
+| Application | Launch Command | GUI Shortcut | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Firefox** | `firefox &` | `Super + d` -> type `firefox` | Web Browsing |
+| **VLC Media Player** | `vlc &` | `Super + d` -> type `vlc` | Media Playback |
+| **Mousepad** | `mousepad &` | `Super + d` -> type `mousepad` | Lightweight GTK GUI Text Editor |
+| **Neovim** | `nvim <file>` | Terminal (`Super + Return`) | Primary Terminal Text Editor |
+| **Antigravity CLI** | `antigravity-cli` or `agy` | Terminal (`Super + Return`) | Agentic AI Orchestration TUI |
+| **Paru** | `paru <pkg>` | Terminal (`Super + Return`) | AUR Package Helper & Pacman Wrapper |
+

@@ -323,6 +323,28 @@ def run_tests():
         report("sed transforms /etc/pacman.conf correctly", "ParallelDownloads = 5" in p_content and "Color" in p_content)
         report("sed uncomments /etc/locale.gen correctly", "en_US.UTF-8 UTF-8" in l_content)
 
+        # Mock multilib and chaotic-aur activation
+        with open(os.path.join(mock_etc, "pacman.conf"), "a") as f:
+            f.write("\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n\n[chaotic-aur]\nInclude = /etc/pacman.d/chaotic-mirrorlist\n")
+
+        with open(os.path.join(mock_etc, "pacman.conf")) as f:
+            p_full = f.read()
+
+        report("pacman.conf enables [multilib]", "[multilib]" in p_full)
+        report("pacman.conf enables [chaotic-aur]", "[chaotic-aur]" in p_full and "chaotic-mirrorlist" in p_full)
+
+        # 4. Verify default applications and display manager in stage2_chroot.sh
+        stage2_path = os.path.join(REPO_DIR, "stage2_chroot.sh")
+        with open(stage2_path, "r", encoding="utf-8") as f:
+            stage2_content = f.read()
+
+        report("Firefox is included in default packages", "firefox" in stage2_content)
+        report("VLC is included in default packages", "vlc" in stage2_content)
+        report("Text editor (neovim/mousepad) is included", "neovim" in stage2_content and "mousepad" in stage2_content)
+        report("LightDM and GTK greeter replace SDDM", "lightdm" in stage2_content and "lightdm-gtk-greeter" in stage2_content)
+        report("LightDM service is enabled", "systemctl enable lightdm.service" in stage2_content)
+        report("antigravity-cli installation step present", "antigravity-cli" in stage2_content)
+
     # ------------------------------------------------------------------------------
     # 11. Testing Hardware Auto-Detection & Specification Recognition
     # ------------------------------------------------------------------------------

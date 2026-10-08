@@ -44,10 +44,18 @@ test_assert_eq "Default BTRFS_MODE" "raid0" "${BTRFS_MODE}"
 test_assert_eq "BTRFS_MOUNT_OPTS contains zstd" "true" "$([[ "${BTRFS_MOUNT_OPTS}" =~ compress=zstd:3 ]] && echo true || echo false)"
 test_assert_eq "Default WM" "bspwm" "${WM}"
 test_assert_eq "Default TERMINAL" "kitty" "${TERMINAL}"
-test_assert_eq "Default DISPLAY_MANAGER" "sddm" "${DISPLAY_MANAGER}"
+test_assert_eq "Default DISPLAY_MANAGER" "lightdm" "${DISPLAY_MANAGER}"
+test_assert_eq "Default TEXT_EDITOR" "neovim" "${TEXT_EDITOR}"
+test_assert_eq "Default BROWSER" "firefox" "${BROWSER}"
 
 # 3. Test AUTO_DETECT_HARDWARE variable
 test_assert_eq "AUTO_DETECT_HARDWARE is true by default" "true" "${AUTO_DETECT_HARDWARE}"
+
+# 3b. Test repository and AUR helper flags
+test_assert_eq "ENABLE_MULTILIB is true by default" "true" "${ENABLE_MULTILIB}"
+test_assert_eq "ENABLE_CHAOTIC_AUR is true by default" "true" "${ENABLE_CHAOTIC_AUR}"
+test_assert_eq "INSTALL_PARU is true by default" "true" "${INSTALL_PARU}"
+test_assert_eq "INSTALL_ANTIGRAVITY_CLI is true by default" "true" "${INSTALL_ANTIGRAVITY_CLI}"
 
 # 4. Test lib/detect.sh execution and hardware specification profiling
 detect_hardware

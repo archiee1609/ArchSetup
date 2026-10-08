@@ -74,24 +74,67 @@ cat <<EOF > /etc/hosts
 EOF
 
 # ------------------------------------------------------------------------------
-# 2. Pacman Optimization & Multilib Activation
+# 2. Pacman Optimization, Multilib, Chaotic-AUR & AUR Helper (Paru)
 # ------------------------------------------------------------------------------
-log_step "Configuring Pacman & Repositories"
+log_step "Configuring Pacman, Repositories & AUR Helper"
 
-# Enable ParallelDownloads, Color, and Multilib
+# Enable ParallelDownloads and Color
 sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /etc/pacman.conf
 sed -i 's/^#Color/Color/' /etc/pacman.conf
 
-if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
+# 1. Enable Multilib Repository
+if [[ "${ENABLE_MULTILIB:-true}" == "true" ]]; then
     log_info "Activating multilib repository..."
-    cat <<EOF >> /etc/pacman.conf
+    if grep -q "^#\[multilib\]" /etc/pacman.conf; then
+        sed -i '/^#\[multilib\]/{s/^#//;n;s/^#//}' /etc/pacman.conf
+    elif ! grep -q "^\[multilib\]" /etc/pacman.conf; then
+        cat <<EOF >> /etc/pacman.conf
 
 [multilib]
 Include = /etc/pacman.d/mirrorlist
 EOF
+    fi
+    log_success "Multilib repository activated."
 fi
 
-pacman -Sy --noconfirm archlinux-keyring
+# 2. Enable Chaotic-AUR Repository
+if [[ "${ENABLE_CHAOTIC_AUR:-true}" == "true" ]]; then
+    log_info "Activating Chaotic-AUR repository..."
+    # Retrieve and sign Chaotic-AUR primary signing key
+    pacman-key --recv-key 3056513887B78AEB --keyserver keyserver.ubuntu.com 2>/dev/null || \
+    pacman-key --recv-key 3056513887B78AEB --keyserver hkps://keyserver.ubuntu.com 2>/dev/null || true
+    pacman-key --lsign-key 3056513887B78AEB 2>/dev/null || true
+
+    # Install chaotic-keyring and chaotic-mirrorlist
+    log_info "Installing Chaotic-AUR keyring and mirrorlist..."
+    pacman -U --noconfirm --needed 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst' 2>/dev/null || true
+    pacman -U --noconfirm --needed 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst' 2>/dev/null || true
+
+    # Append [chaotic-aur] configuration if missing
+    if ! grep -q "^\[chaotic-aur\]" /etc/pacman.conf; then
+        cat <<EOF >> /etc/pacman.conf
+
+[chaotic-aur]
+Include = /etc/pacman.d/chaotic-mirrorlist
+EOF
+    fi
+    log_success "Chaotic-AUR repository configured in /etc/pacman.conf."
+fi
+
+# Refresh pacman package databases
+log_info "Synchronizing package databases..."
+pacman -Sy --noconfirm archlinux-keyring 2>/dev/null || true
+pacman -Sy --noconfirm 2>/dev/null || true
+
+# 3. Install Paru AUR Helper from Chaotic-AUR
+if [[ "${INSTALL_PARU:-true}" == "true" ]]; then
+    log_info "Installing paru AUR helper..."
+    if pacman -S --noconfirm --needed paru 2>/dev/null || pacman -S --noconfirm --needed paru-bin 2>/dev/null; then
+        log_success "paru installed successfully via repository."
+    else
+        log_info "Repository package not directly reachable; will build paru-bin via AUR fallback after user creation."
+    fi
+fi
 
 # ------------------------------------------------------------------------------
 # 3. Graphics, PRIME Offload & Display Packages
@@ -328,7 +371,12 @@ COMMON_USERLAND_PACKAGES=(
     noto-fonts-cjk
     noto-fonts-emoji
     papirus-icon-theme
-    sddm
+    lightdm
+    lightdm-gtk-greeter
+    firefox
+    vlc
+    "${TEXT_EDITOR:-neovim}"
+    mousepad
 )
 
 # Add selected terminal
@@ -350,7 +398,41 @@ else
 fi
 
 pacman -S --noconfirm --needed "${COMMON_USERLAND_PACKAGES[@]}" "${WM_PACKAGES[@]}"
-log_success "Window manager and desktop utilities installed."
+
+# Configure LightDM and GTK Greeter
+if [[ -f /etc/lightdm/lightdm.conf ]]; then
+    log_info "Configuring LightDM GTK Greeter & session..."
+    if grep -q "^#\?greeter-session=" /etc/lightdm/lightdm.conf; then
+        sed -i 's/^#\?greeter-session=.*/greeter-session=lightdm-gtk-greeter/' /etc/lightdm/lightdm.conf
+    else
+        sed -i '/^\[Seat:\*\]/a greeter-session=lightdm-gtk-greeter' /etc/lightdm/lightdm.conf
+    fi
+    if grep -q "^#\?user-session=" /etc/lightdm/lightdm.conf; then
+        sed -i 's/^#\?user-session=.*/user-session=bspwm/' /etc/lightdm/lightdm.conf
+    fi
+fi
+
+# Ensure BSPWM desktop session entry exists for display managers
+mkdir -p /usr/share/xsessions
+if [[ ! -f /usr/share/xsessions/bspwm.desktop ]]; then
+    cat <<'EOF' > /usr/share/xsessions/bspwm.desktop
+[Desktop Entry]
+Name=bspwm
+Comment=Binary space partitioning window manager
+Exec=bspwm
+Type=Application
+EOF
+fi
+
+# Configure system-wide default text editor environment
+mkdir -p /etc/profile.d
+cat <<EOF > /etc/profile.d/editor.sh
+export EDITOR="${TEXT_EDITOR:-neovim}"
+export VISUAL="${TEXT_EDITOR:-neovim}"
+EOF
+chmod +x /etc/profile.d/editor.sh
+
+log_success "Window manager, LightDM, desktop applications & utilities installed."
 
 # ------------------------------------------------------------------------------
 # 10. User Provisioning & Permissions
@@ -384,6 +466,67 @@ fi
 log_info "Configuring sudo privileges for %wheel..."
 echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/10-wheel
 chmod 440 /etc/sudoers.d/10-wheel
+
+# ------------------------------------------------------------------------------
+# 10b. Paru AUR Helper Verification / Userland Build Fallback
+# ------------------------------------------------------------------------------
+if [[ "${INSTALL_PARU:-true}" == "true" ]]; then
+    if ! command -v paru >/dev/null 2>&1; then
+        log_info "Paru not yet installed via binary package. Attempting AUR fallback compilation as user '${USERNAME}'..."
+        PARU_BUILD_DIR="/tmp/paru-bin-build"
+        rm -rf "${PARU_BUILD_DIR}"
+        mkdir -p "${PARU_BUILD_DIR}"
+        chown -R "${USERNAME}:users" "${PARU_BUILD_DIR}"
+        su - "${USERNAME}" -c "git clone --depth=1 https://aur.archlinux.org/paru-bin.git '${PARU_BUILD_DIR}' && cd '${PARU_BUILD_DIR}' && makepkg -si --noconfirm" 2>/dev/null || true
+        rm -rf "${PARU_BUILD_DIR}"
+    fi
+
+    if command -v paru >/dev/null 2>&1; then
+        log_success "Paru AUR helper is installed and verified at $(command -v paru)."
+    else
+        log_warn "Paru could not be installed automatically; it can be installed post-boot via 'pacman -S paru' once network is active."
+    fi
+fi
+
+# ------------------------------------------------------------------------------
+# 10c. Default AUR & Developer Tools (antigravity-cli)
+# ------------------------------------------------------------------------------
+if [[ "${INSTALL_ANTIGRAVITY_CLI:-true}" == "true" ]]; then
+    log_step "Installing Default Developer Tools (antigravity-cli)"
+    log_info "Attempting installation of antigravity-cli..."
+
+    # 1. Check if available directly via Chaotic-AUR binary repository
+    if pacman -S --noconfirm --needed antigravity-cli 2>/dev/null; then
+        log_success "antigravity-cli installed via repository."
+    elif command -v paru >/dev/null 2>&1; then
+        # 2. Try building/installing via Paru as the non-root user
+        log_info "Installing antigravity-cli from AUR using paru..."
+        if su - "${USERNAME}" -c "paru -S --noconfirm --needed antigravity-cli" 2>/dev/null; then
+            log_success "antigravity-cli installed successfully via paru."
+        else
+            log_warn "paru installation of antigravity-cli encountered an issue; attempting direct makepkg fallback."
+        fi
+    fi
+
+    # 3. Direct AUR makepkg fallback compilation if not yet installed
+    if ! command -v antigravity-cli >/dev/null 2>&1 && ! command -v agy >/dev/null 2>&1; then
+        log_info "Attempting direct AUR git clone build of antigravity-cli..."
+        AGY_BUILD_DIR="/tmp/antigravity-cli-build"
+        rm -rf "${AGY_BUILD_DIR}"
+        mkdir -p "${AGY_BUILD_DIR}"
+        chown -R "${USERNAME}:users" "${AGY_BUILD_DIR}"
+        if su - "${USERNAME}" -c "git clone --depth=1 https://aur.archlinux.org/antigravity-cli.git '${AGY_BUILD_DIR}' && cd '${AGY_BUILD_DIR}' && makepkg -si --noconfirm" 2>/dev/null; then
+            log_success "antigravity-cli built and installed from AUR."
+        else
+            log_warn "antigravity-cli could not be built automatically (may require network or can be installed post-boot via 'paru -S antigravity-cli')."
+        fi
+        rm -rf "${AGY_BUILD_DIR}"
+    fi
+
+    if command -v antigravity-cli >/dev/null 2>&1 || command -v agy >/dev/null 2>&1; then
+        log_success "antigravity-cli verified successfully."
+    fi
+fi
 
 # ------------------------------------------------------------------------------
 # 11. Dotfiles & Desktop Configuration Deployment
@@ -444,7 +587,10 @@ log_step "Enabling System Daemons"
 
 systemctl enable NetworkManager.service
 
-if [[ "${DISPLAY_MANAGER}" == "sddm" ]]; then
+if [[ "${DISPLAY_MANAGER}" == "lightdm" ]]; then
+    systemctl enable lightdm.service
+    log_info "Display manager (lightdm) enabled."
+elif [[ "${DISPLAY_MANAGER}" == "sddm" ]]; then
     systemctl enable sddm.service
     log_info "Display manager (sddm) enabled."
 fi

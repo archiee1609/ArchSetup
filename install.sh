@@ -63,12 +63,17 @@ show_summary() {
         echo -e "  Kernel Parameters:          ${KERNEL_CMDLINE_EXTRA}"
     fi
     echo -e "  PRIME Offloading:           ${PRIME_TYPE:-none}"
+    echo -e "  Multilib Repository:        ${CLR_BOLD}$([[ "${ENABLE_MULTILIB:-true}" == "true" ]] && echo "Enabled" || echo "Disabled")${CLR_RESET}"
+    echo -e "  Chaotic-AUR Repository:     ${CLR_BOLD}$([[ "${ENABLE_CHAOTIC_AUR:-true}" == "true" ]] && echo "Enabled" || echo "Disabled")${CLR_RESET}"
+    echo -e "  AUR Helper:                 ${CLR_BOLD}$([[ "${INSTALL_PARU:-true}" == "true" ]] && echo "paru" || echo "None")${CLR_RESET}"
     echo -e "  Timezone / Locale:          ${TIMEZONE} / ${LOCALE}"
     echo -e "  Target Hostname:            ${HOSTNAME}"
     echo -e "  Primary User:               ${USERNAME}"
     echo -e "  Window Manager:             ${CLR_BOLD}${WM}${CLR_RESET}"
     echo -e "  Terminal Emulator:          ${TERMINAL}"
-    echo -e "  Display Manager:            ${DISPLAY_MANAGER}"
+    echo -e "  Display Manager:            ${DISPLAY_MANAGER} (lightdm-gtk-greeter)"
+    echo -e "  Default Web Browser:        ${BROWSER:-firefox}"
+    echo -e "  Default Text Editor:        ${TEXT_EDITOR:-neovim} / mousepad"
     echo -e "================================================================================"
 }
 
@@ -151,6 +156,21 @@ main() {
         echo -e "      ${CLR_BOLD}prime-run <command>${CLR_RESET}   (e.g., prime-run vkcube)"
         echo -e ""
     fi
+    if [[ "${INSTALL_PARU:-true}" == "true" ]]; then
+        echo -e "${CLR_BOLD}AUR & Package Management:${CLR_RESET}"
+        echo -e "  - Paru AUR helper is installed:     ${CLR_BOLD}paru <package>${CLR_RESET}"
+        echo -e "  - Chaotic-AUR prebuilt binaries are enabled for instant installations."
+        echo -e ""
+    fi
+    echo -e "${CLR_BOLD}Default Software & Desktop Environment:${CLR_RESET}"
+    echo -e "  - Display Manager:  ${CLR_BOLD}LightDM${CLR_RESET} (with GTK Greeter)"
+    echo -e "  - Web Browser:      ${CLR_BOLD}Firefox${CLR_RESET}"
+    echo -e "  - Media Player:     ${CLR_BOLD}VLC${CLR_RESET}"
+    echo -e "  - Text Editors:     ${CLR_BOLD}${TEXT_EDITOR:-neovim}${CLR_RESET} (CLI) & ${CLR_BOLD}Mousepad${CLR_RESET} (GTK GUI)"
+    if [[ "${INSTALL_ANTIGRAVITY_CLI:-true}" == "true" ]]; then
+        echo -e "  - Developer Tools:  ${CLR_BOLD}antigravity-cli${CLR_RESET} (Run via 'antigravity-cli' or 'agy')"
+    fi
+    echo -e ""
     echo -e "${CLR_BOLD}Btrfs Snapshot Management:${CLR_RESET}"
     echo -e "  - Snapper/btrfs snapshots taken in /.snapshots are automatically"
     echo -e "    picked up by ${CLR_BOLD}grub-btrfs${CLR_RESET} and displayed in the GRUB boot menu."
