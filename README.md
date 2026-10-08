@@ -1,22 +1,24 @@
 # Adaptive & Modular Arch Linux Deployment Suite
 ### Hardware-Aware Automated Installer & Tuned Tiling Environment
 
-This repository provides an automated, modular, and robust installation suite for Arch Linux. Equipped with an **intelligent hardware specification recognition engine**, the installer automatically discovers system components (CPU architecture, RAM, storage drives, GPU topology, chassis, and virtualization) before installation begins, dynamically adapting drivers, microcode, kernel parameters, initramfs hooks, and power profiles to match the host machine.
+This repository provides an automated, modular, and robust installation suite for Arch Linux. Equipped with an **intelligent hardware specification recognition engine**, the installer automatically probes system specifications (CPU architecture, RAM, storage topology, GPU architecture, chassis type, and virtualization) before installation begins, dynamically adapting drivers, microcode, kernel parameters, initramfs hooks, filesystem layout, and power profiles to match the host machine.
+
+Originally tailored for an Intel Core i5-8250U + AMD Radeon R5 M330 dual-SSD laptop, the suite has been expanded into a **universal, hardware-aware deployment framework** that works seamlessly across bare-metal laptops, desktops, and virtual machines.
 
 ---
 
 ## 1. Automatic Hardware Specification Recognition
 
-Before performing any destructive disk operations, the installer runs a comprehensive hardware probe (`lib/detect.sh`) and generates a tailored hardware profile:
+Before performing any destructive disk operations, the installer executes a comprehensive hardware probe ([`lib/detect.sh`](lib/detect.sh)) and displays a detailed pre-flight profiling report:
 
-| Component | Auto-Detection Logic | Adaptive Configuration Strategy |
+| Hardware Domain | Auto-Detection Mechanism | Adaptive Configuration Strategy |
 | :--- | :--- | :--- |
-| **CPU Architecture** | Probes vendor via `/proc/cpuinfo` & `lscpu` (Intel vs AMD) | Installs `intel-ucode` or `amd-ucode`. Tunes CPU governors and power tools. |
-| **RAM & ZRAM** | Reads memory capacity from `/proc/meminfo` | Configures `zram-generator` with 100% allocation for <= 4 GB RAM (OOM prevention) or 50% for standard/large RAM with `zstd`. |
-| **Storage & Disks** | Discovers NVMe, SATA SSD, and HDD block devices (excludes live USB) | **Single-Disk Mode**: 1GB EFI + Btrfs root with subvolumes (`@`, `@home`, `@snapshots`, etc.).<br>**Multi-Disk Mode**: Automatic RAID0 striped pool or single spanning. Adapts `discard=async` for SSDs/NVMe vs HDDs. |
-| **GPU & Display** | Scans PCI display devices via `lspci` (Intel, AMD, NVIDIA, Virtualization) | **Intel iGPU**: `mesa`, `vulkan-intel`, `intel-media-driver`, Early KMS `i915`.<br>**AMD dGPU/APU**: `vulkan-radeon`, `amdgpu`. Legacy GCN 1.0/2.0 automatically receives SI/CIK kernel flags.<br>**NVIDIA**: `nvidia-dkms`, `nvidia-utils`, `nvidia_drm.modeset=1`.<br>**Hybrid PRIME**: Deploys tailored `/usr/local/bin/prime-run` for AMD (`DRI_PRIME=1`) or NVIDIA.<br>**VMs**: Installs `virtualbox-guest-utils`, `open-vm-tools`, or `qemu-guest-agent`. |
-| **Chassis & Power** | Inspects DMI chassis type, battery status (`/sys/class/power_supply`) & VM hypervisor | **Laptops**: Enables `tlp`, `powertop`, `brightnessctl`, and `thermald` (Intel-only).<br>**Desktops**: Standard performance profile, disables battery throttling.<br>**Virtual Machines**: Disables laptop thermal/power daemons and activates hypervisor guest services. |
-| **Status Bar (Polybar)** | Verifies physical battery presence | Connects detected battery (`BAT0`/`BAT1`) and adapter (`AC`/`ADP1`), or cleanly removes the battery widget on desktops/VMs. |
+| **Platform & Chassis** | `systemd-detect-virt`, DMI `/sys/class/dmi/id/sys_vendor`, `/sys/class/power_supply/BAT*` | **Bare-Metal Laptop**: Enables `tlp`, `powertop`, `brightnessctl`, and `thermald` (Intel-only). Connects battery monitor.<br>**Bare-Metal Desktop**: Configures standard AC performance profile, disables battery throttling.<br>**Virtual Machine**: Disables laptop power/thermal daemons; automatically activates hypervisor guest services. |
+| **CPU Architecture** | `/proc/cpuinfo` vendor ID & `lscpu` model string | **Intel**: Installs `intel-ucode`, configures `intel_pstate` governor (`powersave`).<br>**AMD**: Installs `amd-ucode`, configures `amd_pstate` governor. |
+| **RAM & ZRAM** | `/proc/meminfo` capacity reading | **$\le$ 4 GB RAM**: Allocates 100% ZRAM with `zstd` compression to prevent out-of-memory lockups.<br>**> 4 GB RAM**: Allocates 50% RAM with `zstd` compression (`zram-generator`). |
+| **Storage & Disks** | `lsblk` enumeration (excludes live USB installer media, loops, and RAM disks) | **Single-Disk**: 1 GB EFI partition (`vfat` -> `/boot`) + Btrfs root subvolumes (`@`, `@home`, etc.).<br>**Multi-Disk (2+ Drives)**: Automated striped pool (`raid0`), linear span (`single`), or separate `/data` drive.<br>**Media Adaptation**: Enables `discard=async` for SSDs/NVMe; automatically omits discard on rotational HDDs. |
+| **GPU & Graphics** | PCI display devices scanned via `lspci` (`0300`, `0302`, `0380`) | **Intel iGPU**: `mesa`, `vulkan-intel`, `intel-media-driver`, Early KMS `i915`.<br>**AMD APU/dGPU**: `vulkan-radeon`, `amdgpu`. Legacy GCN 1.0/2.0 cards automatically receive SI/CIK flags.<br>**NVIDIA**: `nvidia-dkms`, `nvidia-utils`, Early KMS `nvidia`, `nvidia_drm.modeset=1`.<br>**Hybrid GPUs**: Deploys tailored `/usr/local/bin/prime-run` wrapper (AMD `DRI_PRIME=1` or NVIDIA offload).<br>**VMs**: Installs `virtualbox-guest-utils`, `open-vm-tools`, or `qemu-guest-agent`. |
+| **Status Bar (Polybar)** | Verifies `/sys/class/power_supply/` | Adapts battery widget to actual battery name (`BAT0`/`BAT1`) and AC adapter (`AC`/`ADP1`). Cleanly strips battery module on desktops and VMs. |
 
 ---
 
@@ -24,79 +26,94 @@ Before performing any destructive disk operations, the installer runs a comprehe
 
 ```
 ArchSetup/
-├── config.env                      # Centralized variables, disks, credentials & desktop settings
+├── config.env                      # Centralized variables, overrides & user credentials
+├── config.env.example              # Reference template with auto-detection options
 ├── install.sh                      # Master interactive installer with hardware auto-detection
-├── stage1_disk_base.sh             # Stage 1: Hardware-aware disks, Btrfs subvolumes, pacstrap & fstab
-├── stage2_chroot.sh                # Stage 2: Tailored drivers, kernel KMS, GRUB, services & dotfiles
+├── stage1_disk_base.sh             # Stage 1: Hardware-aware partitioning, Btrfs setup & pacstrap
+├── stage2_chroot.sh                # Stage 2: Tailored drivers, KMS, GRUB, services & dotfiles
 ├── lib/
 │   ├── common.sh                   # Shared logging, UEFI checks, block device helpers
-│   └── detect.sh                   # Hardware auto-detection & specification profiling engine
-└── configs/
-    ├── amdgpu/
-    │   └── prime-run               # Base DRI_PRIME wrapper
-    ├── boot/
-    │   ├── grub.default            # GRUB template config
-    │   └── mkinitcpio.conf         # Initramfs template with Btrfs & KMS hooks
-    ├── dotfiles/
-    │   ├── bspwm/bspwmrc           # BSPWM configuration script (Catppuccin Mocha aesthetic)
-    │   ├── sxhkd/sxhkdrc           # SXHKD keybindings
-    │   ├── polybar/                # Polybar config and launch script (auto-adapts battery widget)
-    │   │   ├── config.ini
-    │   │   └── launch.sh
-    │   ├── picom/picom.conf        # Dual-GPU tear-free GLX picom configuration
-    │   ├── rofi/config.rasi        # Modern minimal Rofi launcher theme
-    │   ├── kitty/kitty.conf        # Kitty terminal configuration
-    │   ├── alacritty/alacritty.toml# Alacritty configuration
-    │   └── xinitrc                 # Fallback xinit script
-    ├── power/
-    │   └── tlp.conf                # TLP profile template
-    └── zram/
-        └── zram-generator.conf     # zram-generator configuration template
+│   └── detect.sh                   # Hardware auto-detection & specification recognition engine
+├── configs/
+│   ├── amdgpu/
+│   │   └── prime-run               # Base DRI_PRIME execution wrapper
+│   ├── boot/
+│   │   ├── grub.default            # GRUB template config
+│   │   └── mkinitcpio.conf         # Initramfs template with Btrfs & KMS hooks
+│   ├── dotfiles/
+│   │   ├── bspwm/bspwmrc           # BSPWM configuration script (Catppuccin Mocha aesthetic)
+│   │   ├── sxhkd/sxhkdrc           # SXHKD keybindings
+│   │   ├── polybar/                # Polybar config and launch script (auto-adapts battery module)
+│   │   │   ├── config.ini
+│   │   │   └── launch.sh
+│   │   ├── picom/picom.conf        # Tear-free GLX picom compositor configuration
+│   │   ├── rofi/config.rasi        # Modern minimal Rofi launcher theme
+│   │   ├── kitty/kitty.conf        # Kitty terminal configuration
+│   │   ├── alacritty/alacritty.toml# Alacritty configuration
+│   │   └── xinitrc                 # Fallback xinit script
+│   ├── power/
+│   │   └── tlp.conf                # TLP profile template
+│   └── zram/
+│       └── zram-generator.conf     # zram-generator configuration template
+└── tests/
+    ├── test_common.sh              # Unit tests for common library, hardware detection & config
+    └── test_archsetup.py           # Test suite (AST, syntax, TOML, INI, KMS, mock staging)
 ```
 
 ---
 
 ## 3. Storage & Btrfs Strategy
 
-### Btrfs Multi-Device Modes (`BTRFS_MODE` in `config.env`)
+The filesystem architecture adapts automatically depending on the number of storage devices detected:
 
-1. **`raid0` (Default - Recommended for Performance):**
-   - Data is striped across both 120 GB SSDs (`-d raid0`), providing ~240 GB total capacity and doubled sequential throughput.
-   - Metadata is mirrored across both SSDs (`-m raid1`) to prevent filesystem corruption if one device has a bad sector.
-2. **`single` (Linear Spanning):**
-   - Spans both SSDs sequentially without striping (`-d single -m single`).
-3. **`separate` (Isolated Drives):**
+### Supported Storage Modes (`BTRFS_MODE`)
+
+1. **`single_disk` (Automatic for Single-Drive Systems):**
+   - Automatically selected when 1 usable disk is detected (e.g. `/dev/nvme0n1` or `/dev/sda`).
+   - Partition 1: 1 GiB FAT32 EFI System Partition (`/boot`).
+   - Partition 2: Remainder formatted with Btrfs (`ARCH_ROOT`) housing all subvolumes.
+2. **`raid0` (Multi-Device Performance Striping):**
+   - Automatically recommended when 2 or more SSDs are present.
+   - Data is striped across both SSDs (`-d raid0`), doubling sequential read/write throughput.
+   - Metadata is mirrored (`-m raid1`) for fault tolerance against bad sectors.
+3. **`single` (Linear Spanning):**
+   - Spans 2 or more drives sequentially without striping (`-d single -m single`), ideal for drives of mismatched sizes or HDDs.
+4. **`separate` (Isolated Drives):**
    - Drive 1 contains the root Btrfs filesystem (`@`, `@home`, etc.).
    - Drive 2 is formatted independently and mounted at `/data`.
 
 ### Btrfs Subvolume Layout
-All subvolumes are mounted using:
-`noatime,compress=zstd:3,space_cache=v2,discard=async`
+All subvolumes are mounted using high-performance, resilient options:
+`noatime,compress=zstd:3,space_cache=v2[,discard=async]`
 
 - `/` -> `@`
 - `/home` -> `@home`
 - `/.snapshots` -> `@snapshots`
 - `/var/log` -> `@var_log`
 - `/var/cache/pacman/pkg` -> `@pkg`
-- `/boot` -> 1 GiB FAT32 EFI System Partition (`/dev/sda1`)
+- `/boot` -> 1 GiB FAT32 EFI System Partition (`ef00`)
+
+> [!NOTE]
+> `discard=async` is enabled for SSD and NVMe drives to sustain write performance, but is automatically omitted on rotational HDDs where async TRIM is unsupported.
 
 ---
 
-## 4. Graphics & Thermal Architecture
+## 4. Graphics, Display & Thermal Architecture
 
-### AMD Radeon R5 M330 (Oland) on `amdgpu`
-The Oland chip (GCN 1.0 / Southern Islands) uses the legacy `radeon` module by default in the Linux kernel. To enable Vulkan (RADV) and modern DRI PRIME render offloading, the installer passes:
-```text
-radeon.si_support=0 radeon.cik_support=0 amdgpu.si_support=1 amdgpu.cik_support=1
-```
-In `mkinitcpio.conf`, early KMS is explicitly set to:
-```text
-MODULES=(i915 amdgpu)
-```
-Loading `i915` first guarantees that the internal laptop display connected to the Intel UHD 620 initializes as the primary display controller before the discrete Radeon GPU initializes.
+### Multi-GPU & Driver Stack
+- **Intel iGPU**: Installed with `mesa`, `vulkan-intel`, `intel-media-driver` (modern VA-API), and early KMS `i915`.
+- **AMD Radeon / APU**:
+  - Modern AMD (GCN 3+, Polaris, Vega, RDNA 1/2/3/4): Driven natively by `amdgpu` and `vulkan-radeon`.
+  - Legacy GCN 1.0 / 2.0 (Southern Islands & Sea Islands, e.g. Radeon R5 M330, HD 7000/8000): Automatically configured with kernel parameters `radeon.si_support=0 amdgpu.si_support=1` to enable modern Vulkan (RADV) and PRIME offloading.
+- **NVIDIA GPU**: Installed with `nvidia-dkms`, `nvidia-utils`, `lib32-nvidia-utils`, early KMS `nvidia nvidia_modeset nvidia_uvm nvidia_drm`, and `nvidia_drm.modeset=1`.
+- **Virtual Machines**: VirtualBox (`virtualbox-guest-utils`), VMware (`open-vm-tools`), or QEMU/KVM (`qemu-guest-agent`).
 
 ### PRIME Render Offloading
-Applications run by default on the power-efficient Intel UHD 620. To offload graphics-heavy applications or 3D games to the Radeon R5 M330, use the installed `prime-run` wrapper:
+The `/usr/local/bin/prime-run` execution wrapper is automatically tailored to your GPU topology:
+- **AMD Hybrid**: Runs with `DRI_PRIME=1`.
+- **NVIDIA Hybrid**: Runs with `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only`.
+- **Single GPU**: Functions as a transparent passthrough wrapper.
+
 ```bash
 prime-run <command>
 # Examples:
@@ -105,137 +122,152 @@ prime-run vkcube
 prime-run steam
 ```
 
-### Thermal & Power Tuning (Intel Core i5-8250U)
-The 8th Gen i5-8250U easily thermal-throttles under sustained loads. The deployed TLP profile (`/etc/tlp.d/00-i5-8250u-throttling.conf`) and `thermald`:
-- Uses the `powersave` governor with Intel Speed Shift (HWP).
-- Sets `balance_performance` on AC and `balance_power` on battery.
-- Enables Turbo Boost on AC while capping peak frequency ceiling on battery.
-- Enables PCIe ASPM and allows the AMD Radeon dGPU to enter dynamic runtime sleep when not offloading via `prime-run`.
+### Power & Thermal Management
+- **Physical Laptops**:
+  - TLP profile with frequency ceilings on battery to reduce aggressive thermal throttling.
+  - `thermald` deployed on Intel CPUs to manage thermal limits in firmware.
+  - `brightnessctl` and `powertop` installed for display and battery tuning.
+- **Physical Desktops**:
+  - TLP configured with desktop governor profiles without battery throttling.
+- **Virtual Machines**:
+  - Laptop power and thermal daemons are bypassed, enabling native hypervisor guest daemons instead.
 
 ---
 
 ## 5. Step-by-Step Installation Guide
 
 ### Step 1: Boot the Arch Linux Live ISO
-1. Boot the target laptop using the official Arch Linux Live ISO in **UEFI mode**.
-2. Connect to the internet:
-   - For Ethernet: DHCP will configure automatically.
-   - For Wi-Fi: Run `iwctl` to connect to your network:
+1. Boot the target machine using the official Arch Linux Live ISO in **UEFI mode**.
+2. Connect to the network:
+   - For Ethernet: DHCP configures automatically.
+   - For Wi-Fi: Run `iwctl` to connect:
      ```bash
-     iwctl
-     station wlan0 scan
-     station wlan0 get-networks
-     station wlan0 connect "SSID"
-     exit
+     iwctl station wlan0 connect "SSID"
      ```
 3. Verify internet connectivity:
    ```bash
    ping -c 2 archlinux.org
    ```
 
-### Step 2: Clone or Download the Setup Scripts
+### Step 2: Clone the Installer
 ```bash
 git clone https://github.com/your-repo/ArchSetup.git
 cd ArchSetup
 ```
-*(Or copy the `ArchSetup` folder onto the live environment).*
 
-### Step 3: Customize Configuration
-Open [`config.env`](config.env) and adjust the parameters to your preference:
+### Step 3: Optional Configuration Overrides
+The installer automatically recognizes your hardware specifications (`AUTO_DETECT_HARDWARE="true"`). If you wish to set custom passwords, change the username, or override detected defaults, edit [`config.env`](config.env):
 ```bash
 nano config.env
 ```
-Key parameters to verify:
-- `DISK1` and `DISK2` (e.g., `/dev/sda` and `/dev/sdb`).
-- `BTRFS_MODE` (`raid0`, `single`, or `separate`).
-- `WM` (`bspwm`).
-- `DISPLAY_MANAGER` (`sddm` or `none`).
-- `TERMINAL` (`kitty` or `alacritty`).
-- `USERNAME` (administrative user).
-- `TIMEZONE` and `LOCALE`.
+Key configurable parameters:
+- `USERNAME` (default: `archie`)
+- `TIMEZONE` (default: `UTC`)
+- `LOCALE` (default: `en_US.UTF-8`)
+- `WM` (default: `bspwm`)
+- `TERMINAL` (`kitty` or `alacritty`)
+- `DISPLAY_MANAGER` (`sddm` or `none`)
+- `DISK1` / `DISK2` / `BTRFS_MODE` (only needed if overriding auto-detection)
 
-### Step 4: Validate / Test (Optional Dry-Run)
-Before executing destructive disk operations, you can run a full non-destructive dry-run simulation or the automated test suite:
+### Step 4: Validate with Dry-Run Simulation (Recommended)
+Before executing destructive disk operations, run the simulation and automated test suite:
 ```bash
-# Run installer simulation (dry-run without modifying disks)
+# Execute safe simulation (probes hardware, validates commands without modifying disks)
 ./install.sh --dry-run
 
 # Run full test suite (syntax, AST, TOML, INI, permissions & mock staging)
 python3 tests/test_archsetup.py
+./tests/test_common.sh
 ```
 
 ### Step 5: Run the Installation
-Make scripts executable (if not already):
+Make scripts executable:
 ```bash
-chmod +x install.sh stage1_disk_base.sh stage2_chroot.sh
+chmod +x install.sh stage1_disk_base.sh stage2_chroot.sh lib/detect.sh
 ```
 
 Run the master installer:
 ```bash
 ./install.sh
 ```
-The script will perform pre-flight checks, display the hardware and disk configuration summary, and prompt for confirmation (`YES`) before partitioning or formatting any drives.
 
-Alternatively, you can run Stage 1 and Stage 2 independently:
-```bash
-# Execute Stage 1
-./stage1_disk_base.sh
+The installer will probe your hardware, present the auto-detected hardware profile summary, and ask for confirmation (`YES`) before partitioning any drives:
 
-# Enter chroot and execute Stage 2
-arch-chroot /mnt /opt/arch_installer/stage2_chroot.sh
+```text
+======================================================================
+         AUTOMATIC HARDWARE SPECIFICATION DISCOVERY & PROFILING       
+======================================================================
+  Platform / Chassis:     Laptop (Battery: Present [BAT0])
+  Processor (CPU):        Intel(R) Core(TM) i5-8250U (8 threads, Vendor: Intel)
+  Microcode Package:      intel-ucode
+  Physical Memory (RAM):  16.0 GB (16120 MB)
+  ZRAM Swap Strategy:     50% RAM (zstd)
+  Detected Disks:         2 usable drive(s) found
+    * /dev/sda [120G, sata, SSD KINGSTON SA400S37120G]
+    * /dev/sdb [120G, sata, SSD Crucial CT120BX500SSD1]
+  Primary Target Disk:    /dev/sda
+  Secondary Disk:         /dev/sdb
+  Btrfs Pool Strategy:    raid0
+  Mount Options:          noatime,compress=zstd:3,space_cache=v2,discard=async
+  Graphics Architecture:  intel-amd-hybrid
+  Early KMS Modules:      i915 amdgpu
+  PRIME Offloading:       amd
+  Power & Thermal Plan:   TLP (intel_pstate) + thermald thermal mitigation
+======================================================================
 ```
 
+Type `YES` to proceed. The script will execute Stage 1 (partitioning, Btrfs, and pacstrap) followed by Stage 2 in chroot.
+
 ### Step 6: Reboot into the New System
-Once the script prints completion:
+When installation finishes:
 ```bash
 umount -R /mnt
 reboot
 ```
-Remove the live USB drive when prompted.
+Remove your live USB installer when prompted.
 
 ---
 
 ## 6. Post-Installation Verification
 
-### 1. Verify Btrfs Subvolumes & Multi-Device Pool
+### 1. Verify Btrfs Subvolumes & Storage Layout
 ```bash
 # Check filesystem allocation and devices
 btrfs filesystem show /
 
-# Check subvolumes mounted
+# Check mounted subvolumes
 findmnt -t btrfs
 ```
 
-### 2. Verify Hybrid Graphics (Intel iGPU + AMD dGPU)
+### 2. Verify Graphics & PRIME Offloading
 ```bash
-# Verify Intel UHD 620 is active by default:
+# Verify default display renderer:
 glxinfo -B | grep "OpenGL renderer"
 
-# Verify AMD Radeon R5 M330 offloading with prime-run:
+# Verify discrete GPU offloading (on dual-GPU systems):
 prime-run glxinfo -B | grep "OpenGL renderer"
 
 # Verify Vulkan runtimes:
 vulkaninfo --summary
-prime-run vulkaninfo --summary
 ```
 
 ### 3. Verify ZRAM Configuration
 ```bash
 zramctl
-# Expected output: /dev/zram0, zstd algorithm, ~8 GB disksize (50% of 16GB)
+# Expected: /dev/zram0, zstd compression, auto-sized swap capacity
 ```
 
 ### 4. Verify Power Management & Thermals
 ```bash
-# Verify TLP status and CPU governor
+# Check TLP status and active governor
 sudo tlp-stat -p
 
-# Verify thermald is running
+# Check thermald status (Intel laptops)
 systemctl status thermald
 ```
 
 ### 5. Snapshot Booting with `grub-btrfs`
-Whenever a snapshot of the `@` subvolume is created into `/.snapshots/` (e.g. via `snapper` or `btrfs subvolume snapshot`), `grub-btrfsd.service` automatically regenerates `/boot/grub/grub.cfg`, allowing you to boot directly into previous snapshots from the GRUB menu.
+Whenever a snapshot of the `@` subvolume is created in `/.snapshots/` (e.g. via `snapper` or `btrfs subvolume snapshot`), `grub-btrfsd.service` automatically regenerates `/boot/grub/grub.cfg`, allowing you to boot directly into previous system snapshots from the GRUB boot menu.
 
 ---
 
