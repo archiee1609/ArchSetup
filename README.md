@@ -17,7 +17,7 @@ This repository provides an automated, modular, and robust installation suite fo
 | **Storage 2** | 120 GB SATA SSD (`/dev/sdb`) | Spanned multi-device Btrfs pool (RAID0 for performance or Single) or dedicated secondary drive. |
 | **Filesystem** | Btrfs on SSDs | Subvolumes: `@`, `@home`, `@snapshots`, `@var_log`, `@pkg`. Mount options: `noatime,compress=zstd:3,space_cache=v2,discard=async`. |
 | **Bootloader** | GRUB + `grub-btrfs` | GRUB EFI with Btrfs support, automatic snapshot discovery and boot entries. |
-| **Desktop** | Qtile or BSPWM | Modular toggle (`WM="qtile"` or `WM="bspwm"`), `picom` (GLX vsync backend), `rofi`, `kitty`/`alacritty`, `pipewire`, `ly`. |
+| **Desktop** | BSPWM | Tiling WM (`WM="bspwm"`), `sxhkd`, `polybar`, `picom` (GLX vsync backend), `rofi`, `kitty`/`alacritty`, `pipewire`, `sddm`. |
 
 ---
 
@@ -25,7 +25,7 @@ This repository provides an automated, modular, and robust installation suite fo
 
 ```
 ArchSetup/
-├── config.env                      # Centralized variables, disks, credentials & WM toggle
+├── config.env                      # Centralized variables, disks, credentials & desktop settings
 ├── install.sh                      # Master interactive installer with safety checks
 ├── stage1_disk_base.sh             # Stage 1: Disks, Btrfs subvolumes, pacstrap & fstab
 ├── stage2_chroot.sh                # Stage 2: Users, drivers, kernel, GRUB, services & dotfiles
@@ -38,8 +38,7 @@ ArchSetup/
     │   ├── grub.default            # GRUB config with AMD SI parameters and Btrfs preload
     │   └── mkinitcpio.conf         # Early KMS (i915 amdgpu) and Btrfs hook
     ├── dotfiles/
-    │   ├── qtile/config.py         # Qtile configuration (Catppuccin Mocha aesthetic)
-    │   ├── bspwm/bspwmrc           # BSPWM configuration script
+    │   ├── bspwm/bspwmrc           # BSPWM configuration script (Catppuccin Mocha aesthetic)
     │   ├── sxhkd/sxhkdrc           # SXHKD keybindings
     │   ├── polybar/                # Polybar config and launch script
     │   │   ├── config.ini
@@ -149,7 +148,8 @@ nano config.env
 Key parameters to verify:
 - `DISK1` and `DISK2` (e.g., `/dev/sda` and `/dev/sdb`).
 - `BTRFS_MODE` (`raid0`, `single`, or `separate`).
-- `WM` (`qtile` or `bspwm`).
+- `WM` (`bspwm`).
+- `DISPLAY_MANAGER` (`sddm` or `none`).
 - `TERMINAL` (`kitty` or `alacritty`).
 - `USERNAME` (administrative user).
 - `TIMEZONE` and `LOCALE`.
@@ -241,31 +241,21 @@ Whenever a snapshot of the `@` subvolume is created into `/.snapshots/` (e.g. vi
 
 ## 7. Keybindings Quick Reference
 
-### Qtile (`mod` = Super / Windows key)
-- `Super + Return`: Launch terminal (`kitty` / `alacritty`)
-- `Super + d`: Application launcher (`rofi`)
-- `Super + q`: Close focused window
-- `Super + h/j/k/l`: Move focus (Left / Down / Up / Right)
-- `Super + Shift + h/j/k/l`: Move window
-- `Super + Ctrl + h/j/k/l`: Resize window
-- `Super + f`: Toggle fullscreen
-- `Super + t`: Toggle floating
-- `Super + 1-6`: Switch to workspace 1-6
-- `Super + Shift + 1-6`: Move window to workspace 1-6
-- `Super + Ctrl + r`: Reload Qtile configuration
-- `Super + Ctrl + q`: Quit Qtile
-- `XF86AudioRaiseVolume / LowerVolume / Mute`: Audio volume controls
-- `XF86MonBrightnessUp / Down`: Display brightness controls
-
 ### BSPWM (`sxhkd`)
-- `Super + Return`: Launch terminal
-- `Super + d`: Application launcher (`rofi`)
+- `Super + Return`: Launch terminal (`kitty` / `alacritty`)
+- `Super + d`: Application launcher (`rofi` drun mode)
+- `Super + r`: Command runner (`rofi` run mode)
 - `Super + q`: Close focused window
-- `Super + h/j/k/l`: Move focus
-- `Super + Shift + h/j/k/l`: Swap windows
+- `Super + t`: Set window state to tiled
+- `Super + Shift + Space`: Toggle floating window
 - `Super + f`: Toggle fullscreen
-- `Super + Shift + Space`: Toggle floating
+- `Super + h/j/k/l` or `Super + Arrow`: Move focus (West / South / North / East)
+- `Super + Shift + h/j/k/l` or `Super + Shift + Arrow`: Swap windows
 - `Super + 1-6`: Switch to desktop 1-6
 - `Super + Shift + 1-6`: Move window to desktop 1-6
+- `Super + Ctrl + h/j/k/l`: Preselect split direction
+- `Super + Ctrl + Space`: Cancel preselection
 - `Super + Ctrl + r`: Restart BSPWM and reload SXHKD
-- `Super + Ctrl + q`: Quit BSPWM
+- `Super + Ctrl + q`: Quit BSPWM session
+- `XF86AudioRaiseVolume / LowerVolume / Mute`: Audio volume controls (WirePlumber / PipeWire)
+- `XF86MonBrightnessUp / Down`: Display brightness controls (`brightnessctl`)

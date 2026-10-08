@@ -3,7 +3,7 @@
 # Arch Linux Master Automated / Modular Installer
 # Target Architecture: Intel Core i5-8250U + AMD Radeon R5 M330 (Oland)
 # Storage: Dual SATA SSDs (Btrfs Multi-Device / RAID0 Spanning)
-# Window Manager: Qtile / BSPWM
+# Window Manager: BSPWM
 # ==============================================================================
 
 set -euo pipefail

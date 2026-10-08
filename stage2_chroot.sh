@@ -242,7 +242,7 @@ COMMON_USERLAND_PACKAGES=(
     noto-fonts-cjk
     noto-fonts-emoji
     papirus-icon-theme
-    ly
+    sddm
 )
 
 # Add selected terminal
@@ -254,14 +254,12 @@ else
     COMMON_USERLAND_PACKAGES+=(kitty)
 fi
 
-# Add WM packages
+# Add WM packages (BSPWM)
 WM_PACKAGES=()
-if [[ "${WM}" == "qtile" ]]; then
-    WM_PACKAGES=(qtile python-psutil python-dbus-next)
-elif [[ "${WM}" == "bspwm" ]]; then
+if [[ "${WM}" == "bspwm" ]]; then
     WM_PACKAGES=(bspwm sxhkd polybar)
 else
-    log_error "Unknown WM: '${WM}'. Choose 'qtile' or 'bspwm'."
+    log_error "Unknown WM: '${WM}'. Only 'bspwm' is supported."
     exit 1
 fi
 
@@ -309,7 +307,7 @@ log_step "Deploying Idiomatic Dotfiles for ${USERNAME}"
 USER_HOME="/home/${USERNAME}"
 USER_CONFIG="${USER_HOME}/.config"
 
-mkdir -p "${USER_CONFIG}"/{picom,rofi,kitty,alacritty,qtile,bspwm,sxhkd,polybar}
+mkdir -p "${USER_CONFIG}"/{picom,rofi,kitty,alacritty,bspwm,sxhkd,polybar}
 
 # Deploy Picom
 cp "${CONFIGS_DIR}/dotfiles/picom/picom.conf" "${USER_CONFIG}/picom/picom.conf"
@@ -320,9 +318,6 @@ cp "${CONFIGS_DIR}/dotfiles/rofi/config.rasi" "${USER_CONFIG}/rofi/config.rasi"
 # Deploy Terminals
 cp "${CONFIGS_DIR}/dotfiles/kitty/kitty.conf" "${USER_CONFIG}/kitty/kitty.conf"
 cp "${CONFIGS_DIR}/dotfiles/alacritty/alacritty.toml" "${USER_CONFIG}/alacritty/alacritty.toml"
-
-# Deploy Qtile
-cp "${CONFIGS_DIR}/dotfiles/qtile/config.py" "${USER_CONFIG}/qtile/config.py"
 
 # Deploy BSPWM / SXHKD / Polybar
 cp "${CONFIGS_DIR}/dotfiles/bspwm/bspwmrc" "${USER_CONFIG}/bspwm/bspwmrc"
@@ -348,9 +343,9 @@ log_step "Enabling System Daemons"
 
 systemctl enable NetworkManager.service
 
-if [[ "${DISPLAY_MANAGER}" == "ly" ]]; then
-    systemctl enable ly.service
-    log_info "Display manager (ly) enabled."
+if [[ "${DISPLAY_MANAGER}" == "sddm" ]]; then
+    systemctl enable sddm.service
+    log_info "Display manager (sddm) enabled."
 fi
 
 log_success "Stage 2 configuration completed successfully!"

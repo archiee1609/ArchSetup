@@ -1,6 +1,6 @@
 /**
  * Rofi Configuration
- * Minimalist dark theme for Qtile and BSPWM environments
+ * Minimalist dark theme for BSPWM environment
  **/
 
 configuration {

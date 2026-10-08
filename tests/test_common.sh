@@ -42,9 +42,9 @@ test_assert_eq "Default DISK1" "/dev/sda" "${DISK1}"
 test_assert_eq "Default DISK2" "/dev/sdb" "${DISK2}"
 test_assert_eq "Default BTRFS_MODE" "raid0" "${BTRFS_MODE}"
 test_assert_eq "BTRFS_MOUNT_OPTS contains zstd" "true" "$([[ "${BTRFS_MOUNT_OPTS}" =~ compress=zstd:3 ]] && echo true || echo false)"
-test_assert_eq "Default WM" "qtile" "${WM}"
+test_assert_eq "Default WM" "bspwm" "${WM}"
 test_assert_eq "Default TERMINAL" "kitty" "${TERMINAL}"
-test_assert_eq "Default DISPLAY_MANAGER" "ly" "${DISPLAY_MANAGER}"
+test_assert_eq "Default DISPLAY_MANAGER" "sddm" "${DISPLAY_MANAGER}"
 
 # 3. Test logging functions don't fail under pipefail
 log_info "Test info message" > /dev/null

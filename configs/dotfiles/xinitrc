@@ -14,16 +14,13 @@ if [ -f "$usermodmap" ]; then
 fi
 
 # Start session based on selection or fallback
-session=${1:-qtile}
+session=${1:-bspwm}
 
 case $session in
-    qtile)
-        exec qtile start
-        ;;
     bspwm)
         exec bspwm
         ;;
     *)
-        exec qtile start
+        exec bspwm
         ;;
 esac

@@ -88,35 +88,34 @@ def run_tests():
         report(f"Executable bit (+x): {target}", is_exec, "Executable permission missing")
 
     # ------------------------------------------------------------------------------
-    # 3. Qtile Python Config Validation
+    # 3. BSPWM & SXHKD Configuration Validation
     # ------------------------------------------------------------------------------
-    print(f"\n{BLUE}--- 3. Testing Qtile Python Configuration ---{RESET}")
-    qtile_config_path = os.path.join(REPO_DIR, "configs/dotfiles/qtile/config.py")
+    print(f"\n{BLUE}--- 3. Testing BSPWM & SXHKD Configurations ---{RESET}")
+    report("Qtile completely removed from configs", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/qtile")))
 
+    bspwmrc_path = os.path.join(REPO_DIR, "configs/dotfiles/bspwm/bspwmrc")
     try:
-        with open(qtile_config_path, "r", encoding="utf-8") as f:
-            tree = ast.parse(f.read(), filename="config.py")
-        report("Qtile AST parsing (Python syntax)", True)
-
-        # Check that required top-level variables and functions are defined
-        assigned_vars = set()
-        function_names = set()
-        for node in tree.body:
-            if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        assigned_vars.add(target.id)
-            elif isinstance(node, ast.FunctionDef):
-                function_names.add(node.name)
-
-        required_vars = ["keys", "groups", "layouts", "screens", "widget_defaults", "floating_layout"]
-        for req in required_vars:
-            report(f"Qtile config defines '{req}'", req in assigned_vars, f"Missing '{req}' definition")
-
-        report("Qtile config defines 'autostart' hook", "autostart" in function_names, "Missing 'autostart' hook")
-
+        with open(bspwmrc_path, "r", encoding="utf-8") as f:
+            bspwmrc_content = f.read()
+        report("BSPWM config exists", True)
+        report("BSPWM config launches sxhkd", "sxhkd" in bspwmrc_content)
+        report("BSPWM config configures monitors", "bspc monitor" in bspwmrc_content)
+        report("BSPWM config launches picom", "picom" in bspwmrc_content)
+        report("BSPWM config launches polybar", "polybar" in bspwmrc_content)
     except Exception as e:
-        report("Qtile AST parsing", False, str(e))
+        report("BSPWM config validation", False, str(e))
+
+    sxhkdrc_path = os.path.join(REPO_DIR, "configs/dotfiles/sxhkd/sxhkdrc")
+    try:
+        with open(sxhkdrc_path, "r", encoding="utf-8") as f:
+            sxhkdrc_content = f.read()
+        report("SXHKD config exists", True)
+        report("SXHKD config defines terminal shortcut", "super + Return" in sxhkdrc_content)
+        report("SXHKD config defines launcher shortcut", "rofi" in sxhkdrc_content)
+        report("SXHKD config defines workspace navigation", "bspc desktop -f" in sxhkdrc_content)
+        report("SXHKD config defines quit command", "bspc quit" in sxhkdrc_content)
+    except Exception as e:
+        report("SXHKD config validation", False, str(e))
 
     # ------------------------------------------------------------------------------
     # 4. Alacritty TOML Configuration Validation
@@ -263,7 +262,6 @@ def run_tests():
         # 2. Simulate Stage 2 user dotfiles deployment
         mock_user_home = os.path.join(mock_mnt, "home/testuser")
         mock_user_config = os.path.join(mock_user_home, ".config")
-        os.makedirs(os.path.join(mock_user_config, "qtile"), exist_ok=True)
         os.makedirs(os.path.join(mock_user_config, "bspwm"), exist_ok=True)
         os.makedirs(os.path.join(mock_user_config, "sxhkd"), exist_ok=True)
         os.makedirs(os.path.join(mock_user_config, "polybar"), exist_ok=True)
@@ -277,7 +275,6 @@ def run_tests():
         shutil.copy(os.path.join(configs_dir, "dotfiles/rofi/config.rasi"), os.path.join(mock_user_config, "rofi/config.rasi"))
         shutil.copy(os.path.join(configs_dir, "dotfiles/kitty/kitty.conf"), os.path.join(mock_user_config, "kitty/kitty.conf"))
         shutil.copy(os.path.join(configs_dir, "dotfiles/alacritty/alacritty.toml"), os.path.join(mock_user_config, "alacritty/alacritty.toml"))
-        shutil.copy(os.path.join(configs_dir, "dotfiles/qtile/config.py"), os.path.join(mock_user_config, "qtile/config.py"))
         shutil.copy(os.path.join(configs_dir, "dotfiles/bspwm/bspwmrc"), os.path.join(mock_user_config, "bspwm/bspwmrc"))
         shutil.copy(os.path.join(configs_dir, "dotfiles/sxhkd/sxhkdrc"), os.path.join(mock_user_config, "sxhkd/sxhkdrc"))
         shutil.copy(os.path.join(configs_dir, "dotfiles/polybar/config.ini"), os.path.join(mock_user_config, "polybar/config.ini"))
@@ -285,7 +282,7 @@ def run_tests():
         shutil.copy(os.path.join(configs_dir, "dotfiles/xinitrc"), os.path.join(mock_user_home, ".xinitrc"))
 
         all_dotfiles_exist = all([
-            os.path.isfile(os.path.join(mock_user_config, "qtile/config.py")),
+            not os.path.exists(os.path.join(mock_user_config, "qtile")),
             os.path.isfile(os.path.join(mock_user_config, "bspwm/bspwmrc")),
             os.path.isfile(os.path.join(mock_user_config, "sxhkd/sxhkdrc")),
             os.path.isfile(os.path.join(mock_user_config, "polybar/config.ini")),
