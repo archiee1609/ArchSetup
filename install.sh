@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Arch Linux Master Automated / Modular Installer
-# Target Architecture: Intel Core i5-8250U + AMD Radeon R5 M330 (Oland)
-# Storage: Dual SATA SSDs (Btrfs Multi-Device / RAID0 Spanning)
-# Window Manager: BSPWM
+# Adaptive Hardware Profiling & Deployment Suite
+# Automatically detects system specifications and tunes installation accordingly.
 # ==============================================================================
 
 set -euo pipefail
@@ -17,6 +16,11 @@ if [[ -f "${SCRIPT_DIR}/lib/common.sh" ]]; then
 else
     echo "ERROR: lib/common.sh not found!" >&2
     exit 1
+fi
+
+if [[ -f "${SCRIPT_DIR}/lib/detect.sh" ]]; then
+    # shellcheck source=lib/detect.sh
+    source "${SCRIPT_DIR}/lib/detect.sh"
 fi
 
 if [[ -f "${SCRIPT_DIR}/config.env" ]]; then
@@ -33,27 +37,38 @@ print_banner() {
  / ___ \| | | (__| | | || |___| | | | | |_| |>  < | || | | \__ \ || (_| | | |
 /_/   \_\_|  \___|_| |_||_____|_|_| |_|\__,_/_/\_\___|_| |_|___/\__\__,_|_|_|
 ================================================================================
-      Hardware-Tuned Clean Installer: Intel i5-8250U + AMD Radeon R5 M330
+        Adaptive Hardware-Aware Installer & Tiling Environment
 ================================================================================
 EOF
 }
 
 show_summary() {
-    echo -e "${CLR_STEP}Configuration Summary:${CLR_RESET}"
+    echo -e "${CLR_STEP}Installation & Target Configuration Summary:${CLR_RESET}"
     echo -e "  Primary Storage (DISK1):    ${CLR_BOLD}${DISK1}${CLR_RESET}"
-    echo -e "  Secondary Storage (DISK2):  ${CLR_BOLD}${DISK2}${CLR_RESET}"
-    echo -e "  Btrfs Pool Strategy:        ${CLR_BOLD}${BTRFS_MODE}${CLR_RESET}"
+    if [[ -n "${DISK2:-}" && "${BTRFS_MODE:-}" != "single_disk" ]]; then
+        echo -e "  Secondary Storage (DISK2):  ${CLR_BOLD}${DISK2}${CLR_RESET}"
+        echo -e "  Btrfs Pool Strategy:        ${CLR_BOLD}${BTRFS_MODE}${CLR_RESET}"
+    else
+        echo -e "  Secondary Storage:          ${CLR_DIM}None (Single-Disk Layout)${CLR_RESET}"
+        echo -e "  Btrfs Storage Mode:         ${CLR_BOLD}single_disk${CLR_RESET}"
+    fi
     echo -e "  Mount Options:              ${BTRFS_MOUNT_OPTS}"
+    echo -e "  Processor (CPU):            ${CLR_BOLD}${DETECTED_CPU_MODEL:-Standard x86_64}${CLR_RESET}"
+    echo -e "  Microcode Package:          ${CLR_BOLD}${CPU_UCODE_PACKAGE:-None}${CLR_RESET}"
+    echo -e "  System Memory (RAM):        ${DETECTED_RAM_GB:-Unknown} (ZRAM: ${ZRAM_FRACTION:-0.5} ${ZRAM_ALGORITHM:-zstd})"
+    echo -e "  Platform Architecture:      ${CLR_BOLD}${CHASSIS_TYPE:-standard}${CLR_RESET} (Virtualization: ${VIRT_TYPE:-none})"
+    echo -e "  Graphics Stack:             ${CLR_BOLD}${DETECTED_GPU_SETUP:-generic}${CLR_RESET}"
+    echo -e "  Early KMS Modules:          ${KMS_MODULES:-None (Standard KMS)}"
+    if [[ -n "${KERNEL_CMDLINE_EXTRA:-}" ]]; then
+        echo -e "  Kernel Parameters:          ${KERNEL_CMDLINE_EXTRA}"
+    fi
+    echo -e "  PRIME Offloading:           ${PRIME_TYPE:-none}"
     echo -e "  Timezone / Locale:          ${TIMEZONE} / ${LOCALE}"
     echo -e "  Target Hostname:            ${HOSTNAME}"
     echo -e "  Primary User:               ${USERNAME}"
     echo -e "  Window Manager:             ${CLR_BOLD}${WM}${CLR_RESET}"
     echo -e "  Terminal Emulator:          ${TERMINAL}"
     echo -e "  Display Manager:            ${DISPLAY_MANAGER}"
-    echo -e "  Graphics Drivers:           Intel UHD 620 (i915) + AMD R5 M330 (amdgpu SI)"
-    echo -e "  PRIME Offloading:           Enabled (/usr/local/bin/prime-run)"
-    echo -e "  Thermal & Power:            TLP + thermald (tuned for i5-8250U)"
-    echo -e "  ZRAM Allocation:            50% RAM (${ZRAM_ALGORITHM})"
     echo -e "================================================================================"
 }
 
@@ -77,6 +92,16 @@ main() {
     check_root
     check_uefi
     check_network
+
+    # Automatically probe hardware specifications if enabled
+    if [[ "${AUTO_DETECT_HARDWARE:-true}" == "true" ]]; then
+        log_step "Probing System Hardware Specifications"
+        detect_hardware
+        apply_hardware_profile
+        print_hardware_report
+        save_hardware_profile "${SCRIPT_DIR}/hardware.env"
+    fi
+
     show_summary
 
     if [[ "${DRY_RUN:-0}" == "1" ]]; then
@@ -90,7 +115,7 @@ main() {
     fi
 
     echo ""
-    read -rp "Do you wish to start the installation? [y/N]: " PROCEED
+    read -rp "Do you wish to start the installation with these specifications? [y/N]: " PROCEED
     if [[ ! "${PROCEED}" =~ ^[Yy]$ ]]; then
         log_warn "Installation aborted by user."
         exit 0
@@ -119,11 +144,13 @@ main() {
     echo -e "  2. Reboot into your new system:     ${CLR_BOLD}reboot${CLR_RESET}"
     echo -e "  3. Remove your Arch live USB drive."
     echo -e ""
-    echo -e "${CLR_BOLD}Hybrid Graphics Usage:${CLR_RESET}"
-    echo -e "  - Standard desktop apps run automatically on Intel UHD 620."
-    echo -e "  - Offload demanding games/3D apps to AMD Radeon R5 M330 via:"
-    echo -e "      ${CLR_BOLD}prime-run <command>${CLR_RESET}   (e.g., prime-run vkcube or prime-run glxinfo -B)"
-    echo -e ""
+    if [[ "${PRIME_TYPE:-none}" != "none" ]]; then
+        echo -e "${CLR_BOLD}PRIME Offload Usage (${PRIME_TYPE}):${CLR_RESET}"
+        echo -e "  - Standard desktop apps run on primary display GPU."
+        echo -e "  - Offload demanding games/3D apps to discrete GPU via:"
+        echo -e "      ${CLR_BOLD}prime-run <command>${CLR_RESET}   (e.g., prime-run vkcube)"
+        echo -e ""
+    fi
     echo -e "${CLR_BOLD}Btrfs Snapshot Management:${CLR_RESET}"
     echo -e "  - Snapper/btrfs snapshots taken in /.snapshots are automatically"
     echo -e "    picked up by ${CLR_BOLD}grub-btrfs${CLR_RESET} and displayed in the GRUB boot menu."

@@ -46,7 +46,26 @@ test_assert_eq "Default WM" "bspwm" "${WM}"
 test_assert_eq "Default TERMINAL" "kitty" "${TERMINAL}"
 test_assert_eq "Default DISPLAY_MANAGER" "sddm" "${DISPLAY_MANAGER}"
 
-# 3. Test logging functions don't fail under pipefail
+# 3. Test AUTO_DETECT_HARDWARE variable
+test_assert_eq "AUTO_DETECT_HARDWARE is true by default" "true" "${AUTO_DETECT_HARDWARE}"
+
+# 4. Test lib/detect.sh execution and hardware specification profiling
+detect_hardware
+apply_hardware_profile
+
+test_assert_eq "CPU vendor is detected non-empty" "true" "$([[ -n "${DETECTED_CPU_VENDOR}" ]] && echo true || echo false)"
+test_assert_eq "RAM MB is detected greater than 0" "true" "$([[ "${DETECTED_RAM_MB}" -gt 0 ]] && echo true || echo false)"
+test_assert_eq "Disks count is at least 0" "true" "$([[ "${DETECTED_DISK_COUNT}" -ge 0 ]] && echo true || echo false)"
+test_assert_eq "GPU setup is detected non-empty" "true" "$([[ -n "${DETECTED_GPU_SETUP}" ]] && echo true || echo false)"
+test_assert_eq "CPU Microcode package is set" "true" "$([[ -n "${CPU_UCODE_PACKAGE}" ]] && echo true || echo false)"
+
+# 5. Test saving and reloading hardware profile
+MOCK_HW_FILE="/tmp/test_archsetup_hw.env"
+save_hardware_profile "$MOCK_HW_FILE"
+test_assert_eq "Hardware profile saved successfully" "true" "$([[ -f "$MOCK_HW_FILE" ]] && echo true || echo false)"
+rm -f "$MOCK_HW_FILE"
+
+# 6. Test logging functions don't fail under pipefail
 log_info "Test info message" > /dev/null
 log_warn "Test warn message" > /dev/null
 log_error "Test error message" 2> /dev/null

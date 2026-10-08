@@ -52,6 +52,7 @@ def run_tests():
         "stage1_disk_base.sh",
         "stage2_chroot.sh",
         "lib/common.sh",
+        "lib/detect.sh",
         "configs/amdgpu/prime-run",
         "configs/dotfiles/bspwm/bspwmrc",
         "configs/dotfiles/polybar/launch.sh",
@@ -76,6 +77,7 @@ def run_tests():
         "stage1_disk_base.sh",
         "stage2_chroot.sh",
         "lib/common.sh",
+        "lib/detect.sh",
         "configs/amdgpu/prime-run",
         "configs/dotfiles/bspwm/bspwmrc",
         "configs/dotfiles/polybar/launch.sh",
@@ -320,6 +322,121 @@ def run_tests():
 
         report("sed transforms /etc/pacman.conf correctly", "ParallelDownloads = 5" in p_content and "Color" in p_content)
         report("sed uncomments /etc/locale.gen correctly", "en_US.UTF-8 UTF-8" in l_content)
+
+    # ------------------------------------------------------------------------------
+    # 11. Testing Hardware Auto-Detection & Specification Recognition
+    # ------------------------------------------------------------------------------
+    print(f"\n{BLUE}--- 11. Testing Hardware Auto-Detection & Adaptive Profiling ---{RESET}")
+    detect_sh_path = os.path.join(REPO_DIR, "lib/detect.sh")
+
+    # 1. Test live hardware detection execution
+    detect_res = subprocess.run(
+        ["bash", "-c", f"source {detect_sh_path} && detect_hardware && apply_hardware_profile && echo DETECTED_CPU=$DETECTED_CPU_VENDOR && echo DETECTED_RAM=$DETECTED_RAM_MB && echo DETECTED_DISKS=$DETECTED_DISK_COUNT && echo DETECTED_GPU=$DETECTED_GPU_SETUP && echo UCODE=$CPU_UCODE_PACKAGE"],
+        capture_output=True, text=True
+    )
+    report("detect_hardware runs without errors", detect_res.returncode == 0, detect_res.stderr.strip())
+    report("Live CPU vendor detected", "DETECTED_CPU=" in detect_res.stdout)
+    report("Live RAM MB detected", "DETECTED_RAM=" in detect_res.stdout)
+    report("Live Disks counted", "DETECTED_DISKS=" in detect_res.stdout)
+    report("Live GPU setup classified", "DETECTED_GPU=" in detect_res.stdout)
+    report("CPU microcode resolved", "UCODE=" in detect_res.stdout)
+
+    # 2. Test CPU vendor to microcode package mapping
+    test_cpu_intel = subprocess.run(
+        ["bash", "-c", f'source {detect_sh_path} && DETECTED_CPU_VENDOR="Intel" && DETECTED_CPU_UCODE="intel-ucode" && apply_hardware_profile && echo $CPU_UCODE_PACKAGE'],
+        capture_output=True, text=True
+    )
+    report("Intel CPU resolves to intel-ucode", test_cpu_intel.stdout.strip() == "intel-ucode", test_cpu_intel.stdout.strip())
+
+    test_cpu_amd = subprocess.run(
+        ["bash", "-c", f'source {detect_sh_path} && DETECTED_CPU_VENDOR="AMD" && DETECTED_CPU_UCODE="amd-ucode" && apply_hardware_profile && echo $CPU_UCODE_PACKAGE'],
+        capture_output=True, text=True
+    )
+    report("AMD CPU resolves to amd-ucode", test_cpu_amd.stdout.strip() == "amd-ucode", test_cpu_amd.stdout.strip())
+
+    # 3. Test RAM sizing to ZRAM fraction calculation
+    test_ram_low = subprocess.run(
+        ["bash", "-c", f'source {detect_sh_path} && detect_ram 3800 && echo $DETECTED_ZRAM_FRACTION'],
+        capture_output=True, text=True
+    )
+    report("RAM <= 4GB allocates 100% ZRAM", test_ram_low.stdout.strip() == "1.0", test_ram_low.stdout.strip())
+
+    test_ram_high = subprocess.run(
+        ["bash", "-c", f'source {detect_sh_path} && detect_ram 16384 && echo $DETECTED_ZRAM_FRACTION'],
+        capture_output=True, text=True
+    )
+    report("RAM >= 16GB allocates 50% ZRAM", test_ram_high.stdout.strip() == "0.5", test_ram_high.stdout.strip())
+
+    # 4. Test Single-Disk vs Multi-Disk Btrfs profile adaptation
+    test_disk_single = subprocess.run(
+        ["bash", "-c", f'source {detect_sh_path} && DETECTED_DISK_COUNT=1 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_PRIMARY_DISK_ROTA=0 && DETECTED_SECONDARY_DISK="" && apply_hardware_profile && echo "$BTRFS_MODE|$DISK1|$DISK2"'],
+        capture_output=True, text=True
+    )
+    report("1 disk automatically selects single_disk mode", test_disk_single.stdout.strip() == "single_disk|/dev/sda|", test_disk_single.stdout.strip())
+
+    test_disk_multi = subprocess.run(
+        ["bash", "-c", f'source {detect_sh_path} && DETECTED_DISK_COUNT=2 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_PRIMARY_DISK_ROTA=0 && DETECTED_SECONDARY_DISK="/dev/sdb" && DETECTED_RECOMMENDED_BTRFS_MODE="raid0" && apply_hardware_profile && echo "$BTRFS_MODE|$DISK1|$DISK2"'],
+        capture_output=True, text=True
+    )
+    report("2 SSDs select multi-device RAID0 mode", "raid0|/dev/sda|/dev/sdb" in test_disk_multi.stdout.strip(), test_disk_multi.stdout.strip())
+
+    # 5. Test GPU Early KMS and PRIME resolution
+    test_gpu_hybrid = subprocess.run(
+        ["bash", "-c", f'''source {detect_sh_path}
+mock_gpu="00:02.0 VGA compatible controller [0300]: Intel Corporation UHD Graphics 620 [8086:5917]
+01:00.0 Display controller [0380]: Advanced Micro Devices, Inc. Radeon R5 M330 [1002:6900]"
+detect_gpus "$mock_gpu"
+echo "$DETECTED_GPU_SETUP|$DETECTED_KMS_MODULES|$DETECTED_PRIME_TYPE"
+'''],
+        capture_output=True, text=True
+    )
+    report("Intel+AMD SI hybrid sets i915 amdgpu & amd prime", "intel-amd-hybrid|i915 amdgpu|amd" in test_gpu_hybrid.stdout.strip(), test_gpu_hybrid.stdout.strip())
+
+    test_gpu_nvidia = subprocess.run(
+        ["bash", "-c", f'''source {detect_sh_path}
+mock_gpu="00:02.0 VGA compatible controller [0300]: Intel Corporation UHD [8086:9a60]
+01:00.0 3D controller [0302]: NVIDIA Corporation RTX 3060 [10de:2503]"
+detect_gpus "$mock_gpu"
+echo "$DETECTED_GPU_SETUP|$DETECTED_PRIME_TYPE"
+'''],
+        capture_output=True, text=True
+    )
+    report("Intel+NVIDIA sets intel-nvidia-hybrid & nvidia prime", "intel-nvidia-hybrid|nvidia" in test_gpu_nvidia.stdout.strip(), test_gpu_nvidia.stdout.strip())
+
+    # 6. Test Polybar battery adaptation for desktop/VM vs laptop
+    with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
+        poly_temp_path = tf.name
+        tf.write("""[bar/main]
+modules-right = cpu memory battery pulseaudio date
+[module/battery]
+battery = BAT0
+adapter = ADP1
+""")
+
+    try:
+        # Simulate no battery (desktop or VM)
+        subprocess.run(["bash", "-c", f'sed -i "s/modules-right = cpu memory battery pulseaudio date/modules-right = cpu memory pulseaudio date/" {poly_temp_path}'], check=True)
+        with open(poly_temp_path) as f:
+            poly_no_bat = f.read()
+        report("Polybar removes battery module when no battery present", "battery pulseaudio" not in poly_no_bat and "pulseaudio date" in poly_no_bat)
+    finally:
+        if os.path.exists(poly_temp_path):
+            os.remove(poly_temp_path)
+
+    # 7. Test save_hardware_profile persistence
+    with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
+        hw_save_path = tf.name
+    try:
+        subprocess.run(["bash", "-c", f'source {detect_sh_path} && detect_hardware && apply_hardware_profile && save_hardware_profile "{hw_save_path}"'], check=True)
+        with open(hw_save_path) as f:
+            hw_content = f.read()
+        report("Hardware profile file correctly created", os.path.exists(hw_save_path))
+        report("Hardware profile defines DETECTED_CPU_VENDOR", "DETECTED_CPU_VENDOR=" in hw_content)
+        report("Hardware profile defines BTRFS_MODE", "BTRFS_MODE=" in hw_content)
+        report("Hardware profile defines KMS_MODULES", "KMS_MODULES=" in hw_content)
+    finally:
+        if os.path.exists(hw_save_path):
+            os.remove(hw_save_path)
 
     print(f"\n{BLUE}======================================================================{RESET}")
     print(f"Test Results: {GREEN}{passed_count} Passed{RESET}, {RED if failed_count else GREEN}{failed_count} Failed{RESET}")

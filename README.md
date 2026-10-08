@@ -1,23 +1,22 @@
-# Modular Arch Linux Deployment & Tiling Environment
-### Target: Intel Core i5-8250U + AMD Radeon R5 M330 | Dual SATA SSD Btrfs Pool
+# Adaptive & Modular Arch Linux Deployment Suite
+### Hardware-Aware Automated Installer & Tuned Tiling Environment
 
-This repository provides an automated, modular, and robust installation suite for Arch Linux, tuned for a laptop equipped with an **Intel Core i5-8250U** (Intel UHD Graphics 620), an **AMD Radeon R5 M330** (GCN 1.0 Oland), **16 GB DDR4**, and **dual 120 GB SATA SSDs**.
+This repository provides an automated, modular, and robust installation suite for Arch Linux. Equipped with an **intelligent hardware specification recognition engine**, the installer automatically discovers system components (CPU architecture, RAM, storage drives, GPU topology, chassis, and virtualization) before installation begins, dynamically adapting drivers, microcode, kernel parameters, initramfs hooks, and power profiles to match the host machine.
 
 ---
 
-## 1. Hardware Architecture & Technical Rationale
+## 1. Automatic Hardware Specification Recognition
 
-| Component | Hardware Specification | Configuration Strategy |
+Before performing any destructive disk operations, the installer runs a comprehensive hardware probe (`lib/detect.sh`) and generates a tailored hardware profile:
+
+| Component | Auto-Detection Logic | Adaptive Configuration Strategy |
 | :--- | :--- | :--- |
-| **CPU** | Intel Core i5-8250U (4C/8T, 15W TDP) | Tuned `tlp` profile + `thermald` to prevent aggressive thermal throttling spikes. |
-| **iGPU (Primary)** | Intel UHD Graphics 620 (Gen 9.5) | `mesa`, `vulkan-intel`, `intel-media-driver` (modern VA-API), `intel-ucode`. Early KMS with `i915` first. |
-| **dGPU (Offload)** | AMD Radeon R5 M330 (Oland / GCN 1.0 SI) | Experimental `amdgpu` driver routed via kernel cmdline: `radeon.si_support=0 amdgpu.si_support=1`. PRIME offload with `/usr/local/bin/prime-run`. |
-| **RAM** | 16 GB DDR4 | `zram-generator` with 50% RAM allocation (`zram-size = ram * 0.5`) and `zstd` compression algorithm. |
-| **Storage 1** | 120 GB SATA SSD (`/dev/sda`) | 1 GB EFI System Partition (`vfat`, mounted at `/boot`), remainder dedicated to Btrfs pool. |
-| **Storage 2** | 120 GB SATA SSD (`/dev/sdb`) | Spanned multi-device Btrfs pool (RAID0 for performance or Single) or dedicated secondary drive. |
-| **Filesystem** | Btrfs on SSDs | Subvolumes: `@`, `@home`, `@snapshots`, `@var_log`, `@pkg`. Mount options: `noatime,compress=zstd:3,space_cache=v2,discard=async`. |
-| **Bootloader** | GRUB + `grub-btrfs` | GRUB EFI with Btrfs support, automatic snapshot discovery and boot entries. |
-| **Desktop** | BSPWM | Tiling WM (`WM="bspwm"`), `sxhkd`, `polybar`, `picom` (GLX vsync backend), `rofi`, `kitty`/`alacritty`, `pipewire`, `sddm`. |
+| **CPU Architecture** | Probes vendor via `/proc/cpuinfo` & `lscpu` (Intel vs AMD) | Installs `intel-ucode` or `amd-ucode`. Tunes CPU governors and power tools. |
+| **RAM & ZRAM** | Reads memory capacity from `/proc/meminfo` | Configures `zram-generator` with 100% allocation for <= 4 GB RAM (OOM prevention) or 50% for standard/large RAM with `zstd`. |
+| **Storage & Disks** | Discovers NVMe, SATA SSD, and HDD block devices (excludes live USB) | **Single-Disk Mode**: 1GB EFI + Btrfs root with subvolumes (`@`, `@home`, `@snapshots`, etc.).<br>**Multi-Disk Mode**: Automatic RAID0 striped pool or single spanning. Adapts `discard=async` for SSDs/NVMe vs HDDs. |
+| **GPU & Display** | Scans PCI display devices via `lspci` (Intel, AMD, NVIDIA, Virtualization) | **Intel iGPU**: `mesa`, `vulkan-intel`, `intel-media-driver`, Early KMS `i915`.<br>**AMD dGPU/APU**: `vulkan-radeon`, `amdgpu`. Legacy GCN 1.0/2.0 automatically receives SI/CIK kernel flags.<br>**NVIDIA**: `nvidia-dkms`, `nvidia-utils`, `nvidia_drm.modeset=1`.<br>**Hybrid PRIME**: Deploys tailored `/usr/local/bin/prime-run` for AMD (`DRI_PRIME=1`) or NVIDIA.<br>**VMs**: Installs `virtualbox-guest-utils`, `open-vm-tools`, or `qemu-guest-agent`. |
+| **Chassis & Power** | Inspects DMI chassis type, battery status (`/sys/class/power_supply`) & VM hypervisor | **Laptops**: Enables `tlp`, `powertop`, `brightnessctl`, and `thermald` (Intel-only).<br>**Desktops**: Standard performance profile, disables battery throttling.<br>**Virtual Machines**: Disables laptop thermal/power daemons and activates hypervisor guest services. |
+| **Status Bar (Polybar)** | Verifies physical battery presence | Connects detected battery (`BAT0`/`BAT1`) and adapter (`AC`/`ADP1`), or cleanly removes the battery widget on desktops/VMs. |
 
 ---
 
@@ -26,21 +25,22 @@ This repository provides an automated, modular, and robust installation suite fo
 ```
 ArchSetup/
 ├── config.env                      # Centralized variables, disks, credentials & desktop settings
-├── install.sh                      # Master interactive installer with safety checks
-├── stage1_disk_base.sh             # Stage 1: Disks, Btrfs subvolumes, pacstrap & fstab
-├── stage2_chroot.sh                # Stage 2: Users, drivers, kernel, GRUB, services & dotfiles
+├── install.sh                      # Master interactive installer with hardware auto-detection
+├── stage1_disk_base.sh             # Stage 1: Hardware-aware disks, Btrfs subvolumes, pacstrap & fstab
+├── stage2_chroot.sh                # Stage 2: Tailored drivers, kernel KMS, GRUB, services & dotfiles
 ├── lib/
-│   └── common.sh                   # Shared logging, UEFI checks, block device helpers
+│   ├── common.sh                   # Shared logging, UEFI checks, block device helpers
+│   └── detect.sh                   # Hardware auto-detection & specification profiling engine
 └── configs/
     ├── amdgpu/
-    │   └── prime-run               # DRI_PRIME=1 execution wrapper
+    │   └── prime-run               # Base DRI_PRIME wrapper
     ├── boot/
-    │   ├── grub.default            # GRUB config with AMD SI parameters and Btrfs preload
-    │   └── mkinitcpio.conf         # Early KMS (i915 amdgpu) and Btrfs hook
+    │   ├── grub.default            # GRUB template config
+    │   └── mkinitcpio.conf         # Initramfs template with Btrfs & KMS hooks
     ├── dotfiles/
     │   ├── bspwm/bspwmrc           # BSPWM configuration script (Catppuccin Mocha aesthetic)
     │   ├── sxhkd/sxhkdrc           # SXHKD keybindings
-    │   ├── polybar/                # Polybar config and launch script
+    │   ├── polybar/                # Polybar config and launch script (auto-adapts battery widget)
     │   │   ├── config.ini
     │   │   └── launch.sh
     │   ├── picom/picom.conf        # Dual-GPU tear-free GLX picom configuration
@@ -49,9 +49,9 @@ ArchSetup/
     │   ├── alacritty/alacritty.toml# Alacritty configuration
     │   └── xinitrc                 # Fallback xinit script
     ├── power/
-    │   └── tlp.conf                # TLP profile tuned for i5-8250U 15W TDP
+    │   └── tlp.conf                # TLP profile template
     └── zram/
-        └── zram-generator.conf     # zram-generator configuration (50% RAM, zstd)
+        └── zram-generator.conf     # zram-generator configuration template
 ```
 
 ---

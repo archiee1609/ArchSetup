@@ -5,6 +5,12 @@
 
 set -euo pipefail
 
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${LIB_DIR}/detect.sh" ]]; then
+    # shellcheck source=lib/detect.sh
+    source "${LIB_DIR}/detect.sh"
+fi
+
 # ANSI Color Codes
 CLR_RESET="\033[0m"
 CLR_INFO="\033[1;34m"     # Bold Blue
