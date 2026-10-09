@@ -112,8 +112,13 @@ main() {
     if [[ "${DRY_RUN:-0}" == "1" ]]; then
         log_info "DRY-RUN mode enabled. Simulating execution without destructive disk actions."
         "${SCRIPT_DIR}/stage1_disk_base.sh"
-        log_info "[DRY-RUN] Simulating Stage 2 in chroot environment..."
-        python3 "${SCRIPT_DIR}/tests/test_archsetup.py"
+        local py_bin="python3"
+        if ! command -v python3 >/dev/null 2>&1; then
+            if command -v python >/dev/null 2>&1; then
+                py_bin="python"
+            fi
+        fi
+        "${py_bin}" "${SCRIPT_DIR}/tests/test_archsetup.py"
         echo ""
         log_success "[DRY-RUN] Full simulation and validation completed successfully!"
         exit 0

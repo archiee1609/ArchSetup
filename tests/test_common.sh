@@ -66,11 +66,30 @@ test_assert_eq "RAM MB is detected greater than 0" "true" "$([[ "${DETECTED_RAM_
 test_assert_eq "Disks count is at least 0" "true" "$([[ "${DETECTED_DISK_COUNT}" -ge 0 ]] && echo true || echo false)"
 test_assert_eq "GPU setup is detected non-empty" "true" "$([[ -n "${DETECTED_GPU_SETUP}" ]] && echo true || echo false)"
 test_assert_eq "CPU Microcode package is set" "true" "$([[ -n "${CPU_UCODE_PACKAGE}" ]] && echo true || echo false)"
+test_assert_eq "GRAPHICS_PACKAGES is populated" "true" "$([[ ${#GRAPHICS_PACKAGES[@]} -gt 0 ]] && echo true || echo false)"
+
+# 4b. Test mock GPU offload (PRIME) scenarios
+MOCK_INTEL_AMD="00:02.0 VGA compatible controller [0300]: Intel Corporation UHD Graphics 620 [8086:5917]
+01:00.0 Display controller [0380]: Advanced Micro Devices, Inc. Radeon R5 M330 [1002:6900]"
+detect_gpus "${MOCK_INTEL_AMD}"
+apply_hardware_profile
+test_assert_eq "Intel+AMD hybrid setup" "intel-amd-hybrid" "${DETECTED_GPU_SETUP}"
+test_assert_eq "Intel+AMD PRIME offload type" "amd" "${PRIME_TYPE}"
+test_assert_eq "Intel+AMD early KMS modules" "i915 amdgpu" "${KMS_MODULES}"
+test_assert_eq "Intel+AMD SI kernel cmdline flags" "radeon.si_support=0 radeon.cik_support=0 amdgpu.si_support=1 amdgpu.cik_support=1" "${KERNEL_CMDLINE_EXTRA}"
+
+MOCK_INTEL_NV="00:02.0 VGA compatible controller [0300]: Intel Corporation UHD [8086:9a60]
+01:00.0 3D controller [0302]: NVIDIA Corporation RTX 3060 [10de:2503]"
+detect_gpus "${MOCK_INTEL_NV}"
+apply_hardware_profile
+test_assert_eq "Intel+NVIDIA hybrid setup" "intel-nvidia-hybrid" "${DETECTED_GPU_SETUP}"
+test_assert_eq "Intel+NVIDIA PRIME offload type" "nvidia" "${PRIME_TYPE}"
 
 # 5. Test saving and reloading hardware profile
 MOCK_HW_FILE="/tmp/test_archsetup_hw.env"
 save_hardware_profile "$MOCK_HW_FILE"
 test_assert_eq "Hardware profile saved successfully" "true" "$([[ -f "$MOCK_HW_FILE" ]] && echo true || echo false)"
+test_assert_eq "Hardware profile contains GRAPHICS_PACKAGES" "true" "$(grep -q "^GRAPHICS_PACKAGES=" "$MOCK_HW_FILE" && echo true || echo false)"
 rm -f "$MOCK_HW_FILE"
 
 # 6. Test logging functions don't fail under pipefail

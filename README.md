@@ -109,11 +109,14 @@ All subvolumes are mounted using high-performance, resilient options:
 - **NVIDIA GPU**: Installed with `nvidia-dkms`, `nvidia-utils`, `lib32-nvidia-utils`, early KMS `nvidia nvidia_modeset nvidia_uvm nvidia_drm`, and `nvidia_drm.modeset=1`.
 - **Virtual Machines**: VirtualBox (`virtualbox-guest-utils`), VMware (`open-vm-tools`), or QEMU/KVM (`qemu-guest-agent`).
 
-### PRIME Render Offloading
-The `/usr/local/bin/prime-run` execution wrapper is automatically tailored to your GPU topology:
-- **AMD Hybrid**: Runs with `DRI_PRIME=1`.
-- **NVIDIA Hybrid**: Runs with `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only`.
-- **Single GPU**: Functions as a transparent passthrough wrapper.
+### PRIME Render Offloading & Driver Persistence
+The installer accurately recognizes hybrid GPU topologies and ensures driver package lists persist across stages via `hardware.env`:
+- **Driver Package Persistence**: Detected packages (`GRAPHICS_PACKAGES`) are serialized into `/opt/arch_installer/hardware.env` and carried cleanly into the Stage 2 chroot, preventing driver dropouts.
+- **Dynamic Multilib Filtering**: 32-bit packages (`lib32-mesa`, `lib32-vulkan-*`, `lib32-nvidia-utils`) are automatically included when `ENABLE_MULTILIB="true"` and safely omitted if multilib is disabled to prevent package resolution errors.
+- **Execution Wrapper (`/usr/local/bin/prime-run`)**: The wrapper is deployed with automated directory provisioning and tailored to the detected GPU architecture:
+  - **AMD Hybrid**: Runs with `DRI_PRIME=1`.
+  - **NVIDIA Hybrid**: Runs with `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only`.
+  - **Single GPU**: Functions as a transparent passthrough wrapper.
 
 ```bash
 prime-run <command>
@@ -216,13 +219,25 @@ Key configurable parameters:
 ### Step 4: Validate with Dry-Run Simulation (Recommended)
 Before executing destructive disk operations, run the simulation and automated test suite:
 ```bash
-# Execute safe simulation (probes hardware, validates commands without modifying disks)
+# Execute safe dry-run simulation (probes hardware, validates commands and launches chroot simulation)
 ./install.sh --dry-run
 
-# Run full test suite (syntax, AST, TOML, INI, permissions & mock staging)
-python3 tests/test_archsetup.py
-./tests/test_common.sh
+# Run the 96-check comprehensive Python test suite (syntax, AST, TOML, INI, permissions & mock staging)
+python3 -m unittest discover -s tests
+# or: python3 tests/test_archsetup.py
+
+# Run Bash unit tests for hardware detection and PRIME offload resolution
+bash tests/test_common.sh
 ```
+
+The test suite validates:
+- Shell syntax (`bash -n`) across all installer, daemon, and dotfile scripts
+- Binary permissions (+x) on all entrypoints
+- BSPWM, SXHKD, Alacritty, Picom, Rofi, Polybar, and ZRAM configurations
+- GRUB parameters (Southern/Sea Islands flags, Btrfs preloads) and mkinitcpio early KMS order
+- Hardware profiling: CPU vendor resolution, dynamic ZRAM allocation, Btrfs single vs multi-disk layout
+- Multi-GPU classification, Early KMS mapping, and PRIME offload resolution (Intel+AMD hybrid & Intel+NVIDIA hybrid)
+- Staged mock deployment and file transformations without modifying system disks
 
 ### Step 5: Run the Installation
 Make scripts executable:

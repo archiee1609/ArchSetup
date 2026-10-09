@@ -17,6 +17,29 @@ import unittest
 
 REPO_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
+def find_bash():
+    if os.name == "nt":
+        candidates = [
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files\Git\usr\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ]
+        for c in candidates:
+            if os.path.exists(c):
+                return c
+        for p in os.environ.get("PATH", "").split(os.pathsep):
+            if "WindowsApps" in p:
+                continue
+            cand = os.path.join(p, "bash.exe")
+            if os.path.exists(cand):
+                return cand
+    return shutil.which("bash") or "bash"
+
+BASH_BIN = find_bash()
+
+def to_posix(path_str):
+    return str(path_str).replace("\\", "/")
+
 GREEN = "\033[1;32m"
 RED = "\033[1;31m"
 BLUE = "\033[1;34m"
@@ -65,7 +88,7 @@ def run_tests():
         if not os.path.exists(script_path):
             report(f"File exists: {script}", False, "File not found")
             continue
-        res = subprocess.run(["bash", "-n", script_path], capture_output=True, text=True)
+        res = subprocess.run([BASH_BIN, "-n", to_posix(script_path)], capture_output=True, text=True)
         report(f"Syntax validation: {script}", res.returncode == 0, res.stderr.strip())
 
     # ------------------------------------------------------------------------------
@@ -141,7 +164,7 @@ def run_tests():
     polybar_config_path = os.path.join(REPO_DIR, "configs/dotfiles/polybar/config.ini")
     try:
         poly_cfg = configparser.ConfigParser()
-        poly_cfg.read(polybar_config_path)
+        poly_cfg.read(polybar_config_path, encoding="utf-8")
         report("Polybar INI valid format", True)
         report("Polybar 'bar/main' defined", poly_cfg.has_section("bar/main"))
         report("Polybar 'module/bspwm' defined", poly_cfg.has_section("module/bspwm"))
@@ -311,9 +334,9 @@ def run_tests():
             f.write('GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet"\n')
 
         # Run seds
-        subprocess.run(["sed", "-i", "s/^#ParallelDownloads = 5/ParallelDownloads = 5/", os.path.join(mock_etc, "pacman.conf")], check=True)
-        subprocess.run(["sed", "-i", "s/^#Color/Color/", os.path.join(mock_etc, "pacman.conf")], check=True)
-        subprocess.run(["sed", "-i", "s/^#en_US.UTF-8/en_US.UTF-8/", os.path.join(mock_etc, "locale.gen")], check=True)
+        subprocess.run([BASH_BIN, "-c", f'sed -i "s/^#ParallelDownloads = 5/ParallelDownloads = 5/" "{to_posix(os.path.join(mock_etc, "pacman.conf"))}"'], check=True)
+        subprocess.run([BASH_BIN, "-c", f'sed -i "s/^#Color/Color/" "{to_posix(os.path.join(mock_etc, "pacman.conf"))}"'], check=True)
+        subprocess.run([BASH_BIN, "-c", f'sed -i "s/^#en_US.UTF-8/en_US.UTF-8/" "{to_posix(os.path.join(mock_etc, "locale.gen"))}"'], check=True)
 
         with open(os.path.join(mock_etc, "pacman.conf")) as f:
             p_content = f.read()
@@ -349,11 +372,11 @@ def run_tests():
     # 11. Testing Hardware Auto-Detection & Specification Recognition
     # ------------------------------------------------------------------------------
     print(f"\n{BLUE}--- 11. Testing Hardware Auto-Detection & Adaptive Profiling ---{RESET}")
-    detect_sh_path = os.path.join(REPO_DIR, "lib/detect.sh")
+    detect_sh_path = to_posix(os.path.join(REPO_DIR, "lib/detect.sh"))
 
     # 1. Test live hardware detection execution
     detect_res = subprocess.run(
-        ["bash", "-c", f"source {detect_sh_path} && detect_hardware && apply_hardware_profile && echo DETECTED_CPU=$DETECTED_CPU_VENDOR && echo DETECTED_RAM=$DETECTED_RAM_MB && echo DETECTED_DISKS=$DETECTED_DISK_COUNT && echo DETECTED_GPU=$DETECTED_GPU_SETUP && echo UCODE=$CPU_UCODE_PACKAGE"],
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && detect_hardware && apply_hardware_profile && echo DETECTED_CPU=$DETECTED_CPU_VENDOR && echo DETECTED_RAM=$DETECTED_RAM_MB && echo DETECTED_DISKS=$DETECTED_DISK_COUNT && echo DETECTED_GPU=$DETECTED_GPU_SETUP && echo UCODE=$CPU_UCODE_PACKAGE'],
         capture_output=True, text=True
     )
     report("detect_hardware runs without errors", detect_res.returncode == 0, detect_res.stderr.strip())
@@ -365,46 +388,46 @@ def run_tests():
 
     # 2. Test CPU vendor to microcode package mapping
     test_cpu_intel = subprocess.run(
-        ["bash", "-c", f'source {detect_sh_path} && DETECTED_CPU_VENDOR="Intel" && DETECTED_CPU_UCODE="intel-ucode" && apply_hardware_profile && echo $CPU_UCODE_PACKAGE'],
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DETECTED_CPU_VENDOR="Intel" && DETECTED_CPU_UCODE="intel-ucode" && apply_hardware_profile && echo $CPU_UCODE_PACKAGE'],
         capture_output=True, text=True
     )
     report("Intel CPU resolves to intel-ucode", test_cpu_intel.stdout.strip() == "intel-ucode", test_cpu_intel.stdout.strip())
 
     test_cpu_amd = subprocess.run(
-        ["bash", "-c", f'source {detect_sh_path} && DETECTED_CPU_VENDOR="AMD" && DETECTED_CPU_UCODE="amd-ucode" && apply_hardware_profile && echo $CPU_UCODE_PACKAGE'],
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DETECTED_CPU_VENDOR="AMD" && DETECTED_CPU_UCODE="amd-ucode" && apply_hardware_profile && echo $CPU_UCODE_PACKAGE'],
         capture_output=True, text=True
     )
     report("AMD CPU resolves to amd-ucode", test_cpu_amd.stdout.strip() == "amd-ucode", test_cpu_amd.stdout.strip())
 
     # 3. Test RAM sizing to ZRAM fraction calculation
     test_ram_low = subprocess.run(
-        ["bash", "-c", f'source {detect_sh_path} && detect_ram 3800 && echo $DETECTED_ZRAM_FRACTION'],
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && detect_ram 3800 && echo $DETECTED_ZRAM_FRACTION'],
         capture_output=True, text=True
     )
     report("RAM <= 4GB allocates 100% ZRAM", test_ram_low.stdout.strip() == "1.0", test_ram_low.stdout.strip())
 
     test_ram_high = subprocess.run(
-        ["bash", "-c", f'source {detect_sh_path} && detect_ram 16384 && echo $DETECTED_ZRAM_FRACTION'],
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && detect_ram 16384 && echo $DETECTED_ZRAM_FRACTION'],
         capture_output=True, text=True
     )
     report("RAM >= 16GB allocates 50% ZRAM", test_ram_high.stdout.strip() == "0.5", test_ram_high.stdout.strip())
 
     # 4. Test Single-Disk vs Multi-Disk Btrfs profile adaptation
     test_disk_single = subprocess.run(
-        ["bash", "-c", f'source {detect_sh_path} && DETECTED_DISK_COUNT=1 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_PRIMARY_DISK_ROTA=0 && DETECTED_SECONDARY_DISK="" && apply_hardware_profile && echo "$BTRFS_MODE|$DISK1|$DISK2"'],
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DETECTED_DISK_COUNT=1 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_PRIMARY_DISK_ROTA=0 && DETECTED_SECONDARY_DISK="" && apply_hardware_profile && echo "$BTRFS_MODE|$DISK1|$DISK2"'],
         capture_output=True, text=True
     )
     report("1 disk automatically selects single_disk mode", test_disk_single.stdout.strip() == "single_disk|/dev/sda|", test_disk_single.stdout.strip())
 
     test_disk_multi = subprocess.run(
-        ["bash", "-c", f'source {detect_sh_path} && DETECTED_DISK_COUNT=2 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_PRIMARY_DISK_ROTA=0 && DETECTED_SECONDARY_DISK="/dev/sdb" && DETECTED_RECOMMENDED_BTRFS_MODE="raid0" && apply_hardware_profile && echo "$BTRFS_MODE|$DISK1|$DISK2"'],
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DETECTED_DISK_COUNT=2 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_PRIMARY_DISK_ROTA=0 && DETECTED_SECONDARY_DISK="/dev/sdb" && DETECTED_RECOMMENDED_BTRFS_MODE="raid0" && apply_hardware_profile && echo "$BTRFS_MODE|$DISK1|$DISK2"'],
         capture_output=True, text=True
     )
     report("2 SSDs select multi-device RAID0 mode", "raid0|/dev/sda|/dev/sdb" in test_disk_multi.stdout.strip(), test_disk_multi.stdout.strip())
 
     # 5. Test GPU Early KMS and PRIME resolution
     test_gpu_hybrid = subprocess.run(
-        ["bash", "-c", f'''source {detect_sh_path}
+        [BASH_BIN, "-c", f'''source "{detect_sh_path}"
 mock_gpu="00:02.0 VGA compatible controller [0300]: Intel Corporation UHD Graphics 620 [8086:5917]
 01:00.0 Display controller [0380]: Advanced Micro Devices, Inc. Radeon R5 M330 [1002:6900]"
 detect_gpus "$mock_gpu"
@@ -415,7 +438,7 @@ echo "$DETECTED_GPU_SETUP|$DETECTED_KMS_MODULES|$DETECTED_PRIME_TYPE"
     report("Intel+AMD SI hybrid sets i915 amdgpu & amd prime", "intel-amd-hybrid|i915 amdgpu|amd" in test_gpu_hybrid.stdout.strip(), test_gpu_hybrid.stdout.strip())
 
     test_gpu_nvidia = subprocess.run(
-        ["bash", "-c", f'''source {detect_sh_path}
+        [BASH_BIN, "-c", f'''source "{detect_sh_path}"
 mock_gpu="00:02.0 VGA compatible controller [0300]: Intel Corporation UHD [8086:9a60]
 01:00.0 3D controller [0302]: NVIDIA Corporation RTX 3060 [10de:2503]"
 detect_gpus "$mock_gpu"
@@ -437,7 +460,7 @@ adapter = ADP1
 
     try:
         # Simulate no battery (desktop or VM)
-        subprocess.run(["bash", "-c", f'sed -i "s/modules-right = cpu memory battery pulseaudio date/modules-right = cpu memory pulseaudio date/" {poly_temp_path}'], check=True)
+        subprocess.run([BASH_BIN, "-c", f'sed -i "s/modules-right = cpu memory battery pulseaudio date/modules-right = cpu memory pulseaudio date/" "{to_posix(poly_temp_path)}"'], check=True)
         with open(poly_temp_path) as f:
             poly_no_bat = f.read()
         report("Polybar removes battery module when no battery present", "battery pulseaudio" not in poly_no_bat and "pulseaudio date" in poly_no_bat)
@@ -449,13 +472,14 @@ adapter = ADP1
     with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
         hw_save_path = tf.name
     try:
-        subprocess.run(["bash", "-c", f'source {detect_sh_path} && detect_hardware && apply_hardware_profile && save_hardware_profile "{hw_save_path}"'], check=True)
+        subprocess.run([BASH_BIN, "-c", f'source "{detect_sh_path}" && detect_hardware && apply_hardware_profile && save_hardware_profile "{to_posix(hw_save_path)}"'], check=True)
         with open(hw_save_path) as f:
             hw_content = f.read()
         report("Hardware profile file correctly created", os.path.exists(hw_save_path))
         report("Hardware profile defines DETECTED_CPU_VENDOR", "DETECTED_CPU_VENDOR=" in hw_content)
         report("Hardware profile defines BTRFS_MODE", "BTRFS_MODE=" in hw_content)
         report("Hardware profile defines KMS_MODULES", "KMS_MODULES=" in hw_content)
+        report("Hardware profile defines GRAPHICS_PACKAGES", "GRAPHICS_PACKAGES=" in hw_content)
     finally:
         if os.path.exists(hw_save_path):
             os.remove(hw_save_path)

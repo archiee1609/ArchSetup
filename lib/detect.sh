@@ -256,7 +256,7 @@ detect_gpus() {
 
     local si_cik_pattern="Oland|Cape Verde|Pitcairn|Tahiti|Hainan|Curacao|Malta|Bonaire|Hawaii|Kaveri|Kabini|Mullins|Temash|R5 M330|R5 M230|HD 7[0-9]{3}|HD 8[0-9]{3}|R7 2[0-9]{2}|R9 2[0-9]{2}|R9 3[0-9]{2}"
 
-    while IFS= read -r line; do
+    while IFS= read -r line || [[ -n "$line" ]]; do
         [[ -z "$line" ]] && continue
         DETECTED_GPUS+=("$line")
 
@@ -628,7 +628,17 @@ apply_hardware_profile() {
     KMS_MODULES="${DETECTED_KMS_MODULES}"
     KERNEL_CMDLINE_EXTRA="${DETECTED_KERNEL_CMDLINE_EXTRA}"
     PRIME_TYPE="${DETECTED_PRIME_TYPE}"
-    GRAPHICS_PACKAGES=("${DETECTED_GRAPHICS_PACKAGES[@]}")
+    if [[ "${ENABLE_MULTILIB:-true}" == "true" ]]; then
+        GRAPHICS_PACKAGES=("${DETECTED_GRAPHICS_PACKAGES[@]}")
+    else
+        local filtered_gfx=()
+        for pkg in "${DETECTED_GRAPHICS_PACKAGES[@]}"; do
+            if [[ "$pkg" != lib32-* ]]; then
+                filtered_gfx+=("$pkg")
+            fi
+        done
+        GRAPHICS_PACKAGES=("${filtered_gfx[@]}")
+    fi
 
     # 5. Chassis, Battery & Virtualization
     IS_VM="${DETECTED_IS_VM}"
@@ -677,6 +687,8 @@ DETECTED_AMD_IS_LEGACY_SI_CIK="${DETECTED_AMD_IS_LEGACY_SI_CIK}"
 PRIME_TYPE="${PRIME_TYPE}"
 KMS_MODULES="${KMS_MODULES}"
 KERNEL_CMDLINE_EXTRA="${KERNEL_CMDLINE_EXTRA}"
+GRAPHICS_PACKAGES=(${GRAPHICS_PACKAGES[*]:-${DETECTED_GRAPHICS_PACKAGES[*]}})
+DETECTED_GRAPHICS_PACKAGES=(${DETECTED_GRAPHICS_PACKAGES[*]})
 
 DISK1="${DISK1}"
 DISK2="${DISK2}"
@@ -686,6 +698,7 @@ BTRFS_MOUNT_OPTS="${BTRFS_MOUNT_OPTS}"
 ENABLE_MULTILIB="${ENABLE_MULTILIB:-true}"
 ENABLE_CHAOTIC_AUR="${ENABLE_CHAOTIC_AUR:-true}"
 INSTALL_PARU="${INSTALL_PARU:-true}"
+INSTALL_ANTIGRAVITY_CLI="${INSTALL_ANTIGRAVITY_CLI:-true}"
 EOF
     chmod 644 "$target_file"
 }

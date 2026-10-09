@@ -85,9 +85,9 @@ sed -i 's/^#Color/Color/' /etc/pacman.conf
 # 1. Enable Multilib Repository
 if [[ "${ENABLE_MULTILIB:-true}" == "true" ]]; then
     log_info "Activating multilib repository..."
-    if grep -q "^#\[multilib\]" /etc/pacman.conf; then
-        sed -i '/^#\[multilib\]/{s/^#//;n;s/^#//}' /etc/pacman.conf
-    elif ! grep -q "^\[multilib\]" /etc/pacman.conf; then
+    if grep -q "\[multilib\]" /etc/pacman.conf; then
+        sed -i '/\[multilib\]/,/Include/ s/^#//' /etc/pacman.conf
+    else
         cat <<EOF >> /etc/pacman.conf
 
 [multilib]
@@ -150,11 +150,23 @@ if [[ ${#GRAPHICS_PACKAGES[@]} -eq 0 ]]; then
     )
 fi
 
+# Filter out 32-bit multilib packages if multilib repository is disabled
+if [[ "${ENABLE_MULTILIB:-true}" != "true" ]]; then
+    _filtered_gfx=()
+    for _pkg in "${GRAPHICS_PACKAGES[@]}"; do
+        if [[ "$_pkg" != lib32-* ]]; then
+            _filtered_gfx+=("$_pkg")
+        fi
+    done
+    GRAPHICS_PACKAGES=("${_filtered_gfx[@]}")
+fi
+
 log_info "Installing tailored graphics drivers: ${GRAPHICS_PACKAGES[*]}"
 pacman -S --noconfirm --needed "${GRAPHICS_PACKAGES[@]}"
 
 # Deploy PRIME Run Script tailored to GPU architecture
 log_info "Configuring prime-run wrapper (/usr/local/bin/prime-run)..."
+mkdir -p /usr/local/bin
 if [[ "${PRIME_TYPE:-none}" == "nvidia" ]]; then
     cat <<'EOF' > /usr/local/bin/prime-run
 #!/usr/bin/env bash
