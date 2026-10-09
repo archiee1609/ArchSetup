@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Dynamic Color Synchronization Script
+# Extracts colors from xrdb and propagates to Polybar, Alacritty, and Rofi
+# ==============================================================================
+
+DIR="$HOME/.config/bspwm"
+mkdir -p "$DIR/polybar" "$DIR/alacritty" "$DIR/rofi/themes"
+
+getcolors () {
+	FOREGROUND="$(xrdb -query 2>/dev/null | grep 'foreground:' | awk '{print $NF}')"
+	BACKGROUND="$(xrdb -query 2>/dev/null | grep 'background:' | awk '{print $NF}')"
+	CURSOR="$(xrdb -query 2>/dev/null | grep 'cursorColor:' | awk '{print $NF}')"
+	BLACK="$(xrdb -query 2>/dev/null | grep 'color0:' | awk '{print $NF}')"
+	RED="$(xrdb -query 2>/dev/null | grep 'color1:' | awk '{print $NF}')"
+	GREEN="$(xrdb -query 2>/dev/null | grep 'color2:' | awk '{print $NF}')"
+	YELLOW="$(xrdb -query 2>/dev/null | grep 'color3:' | awk '{print $NF}')"
+	BLUE="$(xrdb -query 2>/dev/null | grep 'color4:' | awk '{print $NF}')"
+	MAGENTA="$(xrdb -query 2>/dev/null | grep 'color5:' | awk '{print $NF}')"
+	CYAN="$(xrdb -query 2>/dev/null | grep 'color6:' | awk '{print $NF}')"
+	WHITE="$(xrdb -query 2>/dev/null | grep 'color7:' | awk '{print $NF}')"
+	ALTBLACK="$(xrdb -query 2>/dev/null | grep 'color8:' | awk '{print $NF}')"
+	ALTRED="$(xrdb -query 2>/dev/null | grep 'color9:' | awk '{print $NF}')"
+	ALTGREEN="$(xrdb -query 2>/dev/null | grep 'color10:' | awk '{print $NF}')"
+	ALTYELLOW="$(xrdb -query 2>/dev/null | grep 'color11:' | awk '{print $NF}')"
+	ALTBLUE="$(xrdb -query 2>/dev/null | grep 'color12:' | awk '{print $NF}')"
+	ALTMAGENTA="$(xrdb -query 2>/dev/null | grep 'color13:' | awk '{print $NF}')"
+	ALTCYAN="$(xrdb -query 2>/dev/null | grep 'color14:' | awk '{print $NF}')"
+	ALTWHITE="$(xrdb -query 2>/dev/null | grep 'color15:' | awk '{print $NF}')"
+
+	# Sensible Nord-inspired fallbacks if xrdb query is unset
+	FOREGROUND="${FOREGROUND:-#D8DEE9}"
+	BACKGROUND="${BACKGROUND:-#2E3440}"
+	CURSOR="${CURSOR:-#D8DEE9}"
+	BLACK="${BLACK:-#3B4252}"
+	RED="${RED:-#BF616A}"
+	GREEN="${GREEN:-#A3BE8C}"
+	YELLOW="${YELLOW:-#EBCB8B}"
+	BLUE="${BLUE:-#81A1C1}"
+	MAGENTA="${MAGENTA:-#B48EAD}"
+	CYAN="${CYAN:-#88C0D0}"
+	WHITE="${WHITE:-#E5E9F0}"
+	ALTBLACK="${ALTBLACK:-#4C566A}"
+	ALTRED="${ALTRED:-#BF616A}"
+	ALTGREEN="${ALTGREEN:-#A3BE8C}"
+	ALTYELLOW="${ALTYELLOW:-#EBCB8B}"
+	ALTBLUE="${ALTBLUE:-#81A1C1}"
+	ALTMAGENTA="${ALTMAGENTA:-#B48EAD}"
+	ALTCYAN="${ALTCYAN:-#8FBCBB}"
+	ALTWHITE="${ALTWHITE:-#ECEFF4}"
+}
+
+bspbar () {
+	cat > "$DIR/polybar/colors" <<- EOF
+	[color]
+	FOREGROUND = ${FOREGROUND}
+	BACKGROUND = ${BACKGROUND}
+	BLACK = ${BLACK}
+	RED = ${RED}
+	GREEN = ${GREEN}
+	YELLOW = ${YELLOW}
+	BLUE = ${BLUE}
+	MAGENTA = ${MAGENTA}
+	CYAN = ${CYAN}
+	WHITE = ${WHITE}
+	ALTBLACK = ${ALTBLACK}
+	ALTRED = ${ALTRED}
+	ALTGREEN = ${ALTGREEN}
+	ALTYELLOW = ${ALTYELLOW}
+	ALTBLUE = ${ALTBLUE}
+	ALTMAGENTA = ${ALTMAGENTA}
+	ALTCYAN = ${ALTCYAN}
+	ALTWHITE = ${ALTWHITE}
+	EOF
+}
+
+bspterm () {
+	# Modern TOML colors for Alacritty 0.13+
+	cat > "$DIR/alacritty/colors.toml" <<- _EOF_
+	[colors.primary]
+	background = "${BACKGROUND}"
+	foreground = "${FOREGROUND}"
+
+	[colors.cursor]
+	text = "${BACKGROUND}"
+	cursor = "${CURSOR}"
+
+	[colors.normal]
+	black   = "${BLACK}"
+	red     = "${RED}"
+	green   = "${GREEN}"
+	yellow  = "${YELLOW}"
+	blue    = "${BLUE}"
+	magenta = "${MAGENTA}"
+	cyan    = "${CYAN}"
+	white   = "${WHITE}"
+
+	[colors.bright]
+	black   = "${ALTBLACK}"
+	red     = "${ALTRED}"
+	green   = "${ALTGREEN}"
+	yellow  = "${ALTYELLOW}"
+	blue    = "${ALTBLUE}"
+	magenta = "${ALTMAGENTA}"
+	cyan    = "${ALTCYAN}"
+	white   = "${ALTWHITE}"
+	_EOF_
+
+	# Legacy YAML colors for backwards compatibility
+	cat > "$DIR/alacritty/colors.yml" <<- _EOF_
+	colors:
+	  primary:
+	    background: '${BACKGROUND}'
+	    foreground: '${FOREGROUND}'
+	  normal:
+	    black:   '${BLACK}'
+	    red:     '${RED}'
+	    green:   '${GREEN}'
+	    yellow:  '${YELLOW}'
+	    blue:    '${BLUE}'
+	    magenta: '${MAGENTA}'
+	    cyan:    '${CYAN}'
+	    white:   '${WHITE}'
+	  bright:
+	    black:   '${ALTBLACK}'
+	    red:     '${ALTRED}'
+	    green:   '${ALTGREEN}'
+	    yellow:  '${ALTYELLOW}'
+	    blue:    '${ALTBLUE}'
+	    magenta: '${ALTMAGENTA}'
+	    cyan:    '${ALTCYAN}'
+	    white:   '${ALTWHITE}'
+	_EOF_
+}
+
+bsprofi () {
+	cat > "$DIR/rofi/themes/colors.rasi" <<- EOF
+	* {
+		background:			${BACKGROUND};
+		foreground:			${FOREGROUND};
+		selected:			${BLUE};
+		urgent:				${RED};
+		on:					${GREEN};
+		off:				${RED};
+	}
+	EOF
+}
+
+main () {
+	getcolors
+	bspbar
+	bspterm
+	bsprofi
+}
+
+main

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Terminate existing compositor instances
+killall -q picom compton 2>/dev/null || true
+
+# Wait until processes shut down
+while pgrep -u $UID -x picom >/dev/null || pgrep -u $UID -x compton >/dev/null; do sleep 0.2; done
+
+# Launch picom with configured file
+if [[ -f "$HOME/.config/bspwm/compton.conf" ]]; then
+    picom --config "$HOME/.config/bspwm/compton.conf" -b &
+elif [[ -f "$HOME/.config/picom/picom.conf" ]]; then
+    picom --config "$HOME/.config/picom/picom.conf" -b &
+else
+    picom -b &
+fi

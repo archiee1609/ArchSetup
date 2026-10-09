@@ -319,6 +319,9 @@ BASE_PACKAGES=(
     wget
     nano
     vim
+    bash
+    bash-completion
+    fish
     zram-generator
     pciutils
     usbutils

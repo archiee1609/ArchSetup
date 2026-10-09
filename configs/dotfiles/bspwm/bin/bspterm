@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Terminal Dispatcher for BSPWM
+# Supports Alacritty (TOML/YAML), Kitty, and XFCE4-Terminal with floating modes
+# ==============================================================================
+
+# Locate Alacritty configuration (prefer modern TOML format, fallback to legacy YAML)
+ALACRITTY_CFG=""
+if [[ -f "$HOME/.config/bspwm/alacritty/alacritty.toml" ]]; then
+    ALACRITTY_CFG="$HOME/.config/bspwm/alacritty/alacritty.toml"
+elif [[ -f "$HOME/.config/bspwm/alacritty/alacritty.yml" ]]; then
+    ALACRITTY_CFG="$HOME/.config/bspwm/alacritty/alacritty.yml"
+elif [[ -f "$HOME/.config/alacritty/alacritty.toml" ]]; then
+    ALACRITTY_CFG="$HOME/.config/alacritty/alacritty.toml"
+fi
+
+FLOATING=0
+if [[ "${1:-}" == "-f" ]]; then
+    FLOATING=1
+    shift
+fi
+
+# 1. Primary: Alacritty
+if command -v alacritty >/dev/null 2>&1; then
+    CFG_ARGS=()
+    if [[ -n "$ALACRITTY_CFG" ]]; then
+        CFG_ARGS=(--config-file "$ALACRITTY_CFG")
+    fi
+
+    if [[ $FLOATING -eq 1 ]]; then
+        exec alacritty --class 'alacritty-float,alacritty-float' "${CFG_ARGS[@]}" "$@"
+    else
+        exec alacritty "${CFG_ARGS[@]}" "$@"
+    fi
+fi
+
+# 2. Fallback: Kitty
+if command -v kitty >/dev/null 2>&1; then
+    if [[ $FLOATING -eq 1 ]]; then
+        exec kitty --class 'kitty-float' "$@"
+    else
+        exec kitty "$@"
+    fi
+fi
+
+# 3. Fallback: XFCE4 Terminal (Lightweight, software-rendered GTK fallback)
+if command -v xfce4-terminal >/dev/null 2>&1; then
+    exec xfce4-terminal "$@"
+fi
+
+# 4. Standard X11 Fallback
+exec xterm "$@"

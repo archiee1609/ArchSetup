@@ -1,81 +1,182 @@
 # ==============================================================================
-# SXHKD Keybindings for BSPWM
+# SXHKD Keybindings for BSPWM (The Duck Channel Rice + Enhancements)
 # ==============================================================================
 
-# Launch Terminal
+##---------- Terminal Emulators ----------##
+
+# Standard Terminal
 super + Return
-    kitty
+	bspterm
 
-# Application Launcher
+# Floating Terminal
+super + shift + Return
+	bspterm -f
+
+##---------- Application Launcher & Rofi Menus ----------##
+
+# Application Launcher (Supports Super+d and Alt+F1)
 super + d
-    rofi -show drun
+	sh ~/.config/bspwm/rofi/bin/launcher
 
-super + r
-    rofi -show run
+alt + F1
+	sh ~/.config/bspwm/rofi/bin/launcher
 
-# Hardware Audio (WirePlumber / PipeWire)
-XF86AudioRaiseVolume
-    wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+# Run Dialog (rofi runner)
+super + shift + d
+	rofi -no-lazy-grab -show run
 
-XF86AudioLowerVolume
-    wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+# Network Management Menu
+super + n
+	sh ~/.config/bspwm/rofi/bin/network
 
-XF86AudioMute
-    wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+# Rofi Menus (Windows, MPD, Power Menu, Root Apps)
+super + {w,m,x,r}
+	sh ~/.config/bspwm/rofi/bin/{windows,mpd,powermenu,asroot}
 
-# Hardware Brightness (brightnessctl)
+# Quick Rice Menus (Screenshots, Network, Theme Switcher)
+ctrl + alt + {s,n,t}
+	sh ~/.config/bspwm/rofi/bin/{screenshot,network,themes}
+
+##---------- Applications ----------##
+
+# GUI File Manager (Thunar)
+super + t
+	thunar
+
+# Web Browser (Firefox)
+super + b
+	firefox
+
+##---------- System Hardware Controls ----------##
+
+# Screenshots
+Print
+	scrot 'Screenshot_%Y-%m-%d-%S_$wx$h.png' -e 'mkdir -p ~/Pictures && mv $f ~/Pictures/'
+
+alt + Print
+	scrot -d 5 'Screenshot_%Y-%m-%d-%S_$wx$h.png' -e 'mkdir -p ~/Pictures && mv $f ~/Pictures/'
+
+# Brightness Controls (brightnessctl)
 XF86MonBrightnessUp
-    brightnessctl set +5%
+	brightnessctl set +5%
 
 XF86MonBrightnessDown
-    brightnessctl set 5%-
+	brightnessctl set 5%-
 
-# Window Management
-super + q
-    bspc node -c
+# Volume Controls (WirePlumber / PipeWire / ALSA)
+XF86AudioRaiseVolume
+	wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+ 2>/dev/null || amixer set Master 5%+
 
-super + t
-    bspc node -t tiled
+XF86AudioLowerVolume
+	wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%- 2>/dev/null || amixer set Master 5%-
 
-super + shift + space
-    bspc node -t ~floating
+XF86AudioMute
+	wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle 2>/dev/null || amixer set Master toggle
 
-super + f
-    bspc node -t ~fullscreen
+# Music playback controls (MPD / MPC)
+XF86Audio{Next,Prev,Play,Stop}
+	mpc {next,prev,toggle,stop} 2>/dev/null
 
-# Reload BSPWM / SXHKD
-super + control + r
-    pkill -USR1 -x sxhkd; bspc wm -r
+##---------- BSPWM Window Controls ----------##
 
+# Lock Screen
+ctrl + alt + l
+	bsplock
+
+# Reload Keybindings Daemon
+super + Escape
+	pkill -USR1 -x sxhkd
+
+# Quit / Restart BSPWM
 super + control + q
-    bspc quit
+	bspc quit
 
-# Window Focus
-super + {h,j,k,l}
-    bspc node -f {west,south,north,east}
+super + control + r
+	bspc wm -r
 
+ctrl + alt + {q,r}
+	bspc {quit,wm -r}
+
+# Close Focused Window
+super + q
+	bspc node -c
+
+# Force Kill Window
+ctrl + alt + Escape
+	xkill
+
+# Fullscreen / Monocle toggle
+super + f
+	bspc desktop -l next
+
+# Window split directions
+super + {h,v}
+	bspc node -p {east,south}
+
+super + ctrl + space
+	bspc node -p cancel
+
+# Preselect Split Ratio
+super + ctrl + {1-9}
+	bspc node -o 0.{1-9}
+
+# Toggle Floating & Tiled
+super + space
+	bspc node -t "~"{floating,tiled}
+
+# Pseudo Tiled & Tiled Mode
+super + {p,shift + t}
+	bspc node -t {pseudo_tiled,tiled}
+
+# Window Flags (Marked, Locked, Sticky, Private)
+super + ctrl + {m,x,y,z}
+	bspc node -g {marked,locked,sticky,private}
+
+# Directional Window Focus
 super + {Left,Down,Up,Right}
-    bspc node -f {west,south,north,east}
+	bspc node -f {west,south,north,east}
+
+super + {h,j,k,l}
+	bspc node -f {west,south,north,east}
 
 # Swap Windows
-super + shift + {h,j,k,l}
-    bspc node -s {west,south,north,east}
-
 super + shift + {Left,Down,Up,Right}
-    bspc node -s {west,south,north,east}
+	bspc node -s {west,south,north,east}
+
+super + shift + {h,j,k,l}
+	bspc node -s {west,south,north,east}
+
+# Cycle Window Focus
+alt + Tab
+	bspc node -f next.local
+
+alt + shift + Tab
+	bspc node -f prev.local
 
 # Switch Workspaces
-super + {1-6}
-    bspc desktop -f '^{1-6}'
+ctrl + alt + {Left,Right}
+	bspc desktop -f {prev.local,next.local}
 
-# Move Focused Window to Workspace
-super + shift + {1-6}
-    bspc node -d '^{1-6}' --follow
+# Switch to Specific Workspace (1-8)
+super + {1-8}
+	bspc desktop -f '^{1-8}'
 
-# Preselect Direction
-super + ctrl + {h,j,k,l}
-    bspc node -p {west,south,north,east}
+# Move Focused Window to Workspace (1-8)
+super + shift + {1-8}
+	bspc node -d '^{1-8}' --follow
 
-# Cancel Preselection
-super + ctrl + space
-    bspc node -p cancel
+# Expanding Windows
+super + control + {Left,Right,Up,Down}
+	bspc node -z {left -20 0,right 20 0,top 0 -20,bottom 0 20}
+
+# Shrinking Windows
+super + alt + {Left,Right,Up,Down}
+	bspc node -z {left 20 0,right -20 0,top 0 20,bottom 0 -20}
+
+# Move Floating Windows
+alt + shift + {Left,Down,Up,Right}
+	bspc node -v {-20 0,0 20,0 -20,20 0}
+
+# Hide / Unhide Window
+super + shift + i
+	winmask

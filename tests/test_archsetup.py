@@ -81,6 +81,28 @@ def run_tests():
         "configs/dotfiles/polybar/launch.sh",
         "configs/dotfiles/xinitrc",
         "tests/test_common.sh",
+        "configs/dotfiles/bspwm/bin/bspterm",
+        "configs/dotfiles/bspwm/bin/bspcolors",
+        "configs/dotfiles/bspwm/bin/bspcomp",
+        "configs/dotfiles/bspwm/bin/bspbar",
+        "configs/dotfiles/bspwm/bin/bspfloat",
+        "configs/dotfiles/bspwm/bin/bsplock",
+        "configs/dotfiles/bspwm/bin/winmask",
+        "configs/dotfiles/bspwm/bin/apps_as_root",
+        "configs/dotfiles/bspwm/bin/askpass",
+        "configs/dotfiles/bspwm/rofi/bin/launcher",
+        "configs/dotfiles/bspwm/rofi/bin/themes",
+        "configs/dotfiles/bspwm/rofi/bin/windows",
+        "configs/dotfiles/bspwm/rofi/bin/powermenu",
+        "configs/dotfiles/bspwm/rofi/bin/asroot",
+        "configs/dotfiles/bspwm/rofi/bin/confirm",
+        "configs/dotfiles/bspwm/rofi/bin/mpd",
+        "configs/dotfiles/bspwm/rofi/bin/network",
+        "configs/dotfiles/bspwm/rofi/bin/screenshot",
+        "configs/dotfiles/bspwm/themes/set-theme",
+        "configs/dotfiles/dunst/notification.sh",
+        "configs/dotfiles/dunst/test.sh",
+        "configs/dotfiles/.fehbg",
     ]
 
     for script in shell_scripts:
@@ -125,8 +147,9 @@ def run_tests():
         report("BSPWM config exists", True)
         report("BSPWM config launches sxhkd", "sxhkd" in bspwmrc_content)
         report("BSPWM config configures monitors", "bspc monitor" in bspwmrc_content)
-        report("BSPWM config launches picom", "picom" in bspwmrc_content)
-        report("BSPWM config launches polybar", "polybar" in bspwmrc_content)
+        report("BSPWM config launches picom", "bspcomp" in bspwmrc_content or "picom" in bspwmrc_content)
+        report("BSPWM config launches polybar", "bspbar" in bspwmrc_content or "polybar" in bspwmrc_content)
+        report("BSPWM config enforces Rofi focus", "bspc rule -a Rofi state=floating focus=on" in bspwmrc_content)
     except Exception as e:
         report("BSPWM config validation", False, str(e))
 
@@ -136,11 +159,31 @@ def run_tests():
             sxhkdrc_content = f.read()
         report("SXHKD config exists", True)
         report("SXHKD config defines terminal shortcut", "super + Return" in sxhkdrc_content)
-        report("SXHKD config defines launcher shortcut", "rofi" in sxhkdrc_content)
+        report("SXHKD config defines launcher shortcut", "rofi" in sxhkdrc_content or "launcher" in sxhkdrc_content)
         report("SXHKD config defines workspace navigation", "bspc desktop -f" in sxhkdrc_content)
         report("SXHKD config defines quit command", "bspc quit" in sxhkdrc_content)
     except Exception as e:
         report("SXHKD config validation", False, str(e))
+
+    # ------------------------------------------------------------------------------
+    # 3b. Shells Configuration Validation (Bash & Fish)
+    # ------------------------------------------------------------------------------
+    print(f"\n{BLUE}--- 3b. Testing Shell Configurations (Bash & Fish) ---{RESET}")
+    bashrc_path = os.path.join(REPO_DIR, "configs/dotfiles/bash/.bashrc")
+    report("Bash .bashrc exists", os.path.isfile(bashrc_path))
+    if os.path.isfile(bashrc_path):
+        with open(bashrc_path, "r", encoding="utf-8") as f:
+            b_txt = f.read()
+        report("Bash .bashrc defines interactive prompt", "PS1=" in b_txt)
+        report("Bash .bashrc exports user path", 'export PATH=' in b_txt)
+
+    fish_config_path = os.path.join(REPO_DIR, "configs/dotfiles/fish/config.fish")
+    report("Fish config.fish exists", os.path.isfile(fish_config_path))
+    if os.path.isfile(fish_config_path):
+        with open(fish_config_path, "r", encoding="utf-8") as f:
+            fish_txt = f.read()
+        report("Fish config defines interactive prompt", "function fish_prompt" in fish_txt)
+        report("Fish config defines environment paths", "fish_add_path" in fish_txt)
 
     # ------------------------------------------------------------------------------
     # 4. Alacritty TOML Configuration Validation
@@ -294,6 +337,7 @@ def run_tests():
         os.makedirs(os.path.join(mock_user_config, "rofi"), exist_ok=True)
         os.makedirs(os.path.join(mock_user_config, "kitty"), exist_ok=True)
         os.makedirs(os.path.join(mock_user_config, "alacritty"), exist_ok=True)
+        os.makedirs(os.path.join(mock_user_config, "fish"), exist_ok=True)
 
         configs_dir = os.path.join(installer_dir, "configs")
         shutil.copy(os.path.join(configs_dir, "dotfiles/picom/picom.conf"), os.path.join(mock_user_config, "picom/picom.conf"))
@@ -305,6 +349,8 @@ def run_tests():
         shutil.copy(os.path.join(configs_dir, "dotfiles/polybar/config.ini"), os.path.join(mock_user_config, "polybar/config.ini"))
         shutil.copy(os.path.join(configs_dir, "dotfiles/polybar/launch.sh"), os.path.join(mock_user_config, "polybar/launch.sh"))
         shutil.copy(os.path.join(configs_dir, "dotfiles/xinitrc"), os.path.join(mock_user_home, ".xinitrc"))
+        shutil.copy(os.path.join(configs_dir, "dotfiles/bash/.bashrc"), os.path.join(mock_user_home, ".bashrc"))
+        shutil.copy(os.path.join(configs_dir, "dotfiles/fish/config.fish"), os.path.join(mock_user_config, "fish/config.fish"))
 
         all_dotfiles_exist = all([
             not os.path.exists(os.path.join(mock_user_config, "qtile")),
@@ -316,6 +362,8 @@ def run_tests():
             os.path.isfile(os.path.join(mock_user_config, "kitty/kitty.conf")),
             os.path.isfile(os.path.join(mock_user_config, "alacritty/alacritty.toml")),
             os.path.isfile(os.path.join(mock_user_home, ".xinitrc")),
+            os.path.isfile(os.path.join(mock_user_home, ".bashrc")),
+            os.path.isfile(os.path.join(mock_user_config, "fish/config.fish")),
         ])
         report("All user dotfiles deployed properly to target paths", all_dotfiles_exist)
 
@@ -356,7 +404,12 @@ def run_tests():
         report("pacman.conf enables [multilib]", "[multilib]" in p_full)
         report("pacman.conf enables [chaotic-aur]", "[chaotic-aur]" in p_full and "chaotic-mirrorlist" in p_full)
 
-        # 4. Verify default applications and display manager in stage2_chroot.sh
+        # 4. Verify base & userland package manifests
+        stage1_path = os.path.join(REPO_DIR, "stage1_disk_base.sh")
+        with open(stage1_path, "r", encoding="utf-8") as f:
+            stage1_content = f.read()
+        report("stage1 installs bash and fish in BASE_PACKAGES", "bash\n" in stage1_content and "fish\n" in stage1_content)
+
         stage2_path = os.path.join(REPO_DIR, "stage2_chroot.sh")
         with open(stage2_path, "r", encoding="utf-8") as f:
             stage2_content = f.read()
@@ -367,6 +420,9 @@ def run_tests():
         report("LightDM and GTK greeter replace SDDM", "lightdm" in stage2_content and "lightdm-gtk-greeter" in stage2_content)
         report("LightDM service is enabled", "systemctl enable lightdm.service" in stage2_content)
         report("antigravity-cli installation step present", "antigravity-cli" in stage2_content)
+        report("stage2 installs shells (bash, fish)", "bash" in stage2_content and "fish" in stage2_content)
+        report("stage2 installs Alacritty & XFCE4-terminal", "alacritty" in stage2_content and "xfce4-terminal" in stage2_content)
+        report("stage2 installs Thunar file manager", "thunar" in stage2_content)
 
     # ------------------------------------------------------------------------------
     # 11. Testing Hardware Auto-Detection & Specification Recognition

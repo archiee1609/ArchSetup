@@ -40,17 +40,22 @@ ArchSetup/
 │   │   └── prime-run               # Base DRI_PRIME execution wrapper
 │   ├── boot/
 │   │   ├── grub.default            # GRUB template config
+│   │   ├── grub-themes/Vimix       # Vimix GRUB dark theme
 │   │   └── mkinitcpio.conf         # Initramfs template with Btrfs & KMS hooks
 │   ├── dotfiles/
-│   │   ├── bspwm/bspwmrc           # BSPWM configuration script (Catppuccin Mocha aesthetic)
-│   │   ├── sxhkd/sxhkdrc           # SXHKD keybindings
-│   │   ├── polybar/                # Polybar config and launch script (auto-adapts battery module)
-│   │   │   ├── config.ini
-│   │   │   └── launch.sh
-│   │   ├── picom/picom.conf        # Tear-free GLX picom compositor configuration
-│   │   ├── rofi/config.rasi        # Modern minimal Rofi launcher theme
+│   │   ├── bash/                   # Bash configuration (.bashrc, .bash_profile with git PS1)
+│   │   ├── fish/                   # Fish configuration (config.fish with themes & aliases)
+│   │   ├── bspwm/
+│   │   │   ├── bspwmrc             # BSPWM window manager master configuration
+│   │   │   ├── bin/                # Rice helper utilities (bspcolors, bsptheme, bspterm, bspcomp)
+│   │   │   ├── themes/             # 20+ color themes (Dracula, Nord, Gruvbox, Catppuccin, etc.)
+│   │   │   ├── wallpapers/         # Theme-matching wallpapers
+│   │   │   ├── alacritty/          # Dual TOML & legacy YAML Alacritty color profiles
+│   │   │   ├── polybar/            # Hardware-adaptive Polybar configs & modules
+│   │   │   └── rofi/               # Rofi launcher themes with smooth continuous scrolling
+│   │   ├── sxhkd/sxhkdrc           # SXHKD keybindings (terminal, launchers, themes, layouts)
 │   │   ├── kitty/kitty.conf        # Kitty terminal configuration
-│   │   ├── alacritty/alacritty.toml# Alacritty configuration
+│   │   ├── dunst/dunstrc           # Dunst desktop notification styling
 │   │   └── xinitrc                 # Fallback xinit script
 │   ├── power/
 │   │   └── tlp.conf                # TLP profile template
@@ -58,7 +63,7 @@ ArchSetup/
 │       └── zram-generator.conf     # zram-generator configuration template
 └── tests/
     ├── test_common.sh              # Unit tests for common library, hardware detection & config
-    └── test_archsetup.py           # Test suite (AST, syntax, TOML, INI, KMS, mock staging)
+    └── test_archsetup.py           # Comprehensive test suite (AST, syntax, TOML, Rofi, shell, staging)
 ```
 
 ---
@@ -174,6 +179,24 @@ The installer equips the system with an idiomatic, curated software stack ready 
    - Pre-configured with session autodetect pointing directly to `bspwm`.
 5. **Media Player (`vlc`)**: Full-featured media player with comprehensive codec support out of the box.
 
+### 5. Shell Environments & Dual Shell Support
+- **Dual Shells Installed**: Both `bash` and `fish` are pre-installed and configured out of the box.
+- **Configurable Default Shell**: Select your preferred login shell via `DEFAULT_SHELL="fish"` or `DEFAULT_SHELL="bash"` in `config.env`. Both shells are verified and registered in `/etc/shells`.
+- **Pre-Configured Shell Profiles**:
+  - `bash`: Customized `.bashrc` and `.bash_profile` featuring git branch prompts, colorized directory listings, bash completion, and terminal safety aliases.
+  - `fish`: Tailored `config.fish` with modern syntax highlighting, autosuggestions, git status indicators, and clean vi/emacs keybind support.
+- **Resilient Fallback Terminal**: Includes `xfce4-terminal` alongside `alacritty` and `kitty`. The launcher wrapper `bspterm` automatically detects installed terminals and cascades smoothly, preventing black screens or missing shell errors caused by missing GPU OpenGL contexts in virtual machines.
+
+### 6. Automated Community Rice & Dotfiles (The Duck Channel)
+- **Automated Git Deployment**: Set `AUTO_INSTALL_DOTFILES="true"` to automatically fetch and deploy the popular community rice from [The Duck Channel](https://github.com/theduckchannel/bspwm-install.git).
+- **100% Offline Capable**: A full snapshot of the rice is pre-bundled into `configs/dotfiles/` so the system installs seamlessly even with no active internet connection.
+- **20+ Dynamic Color Themes**: Switch between palettes (Dracula, Nord, Gruvbox, Catppuccin, TokyoNight, etc.) anytime using `Ctrl + Alt + t` (`bsptheme`).
+- **Fixed Rofi Keyboard & Mouse Scrolling**:
+  - Automatically configured with `bspc rule -a Rofi state=floating focus=on` and `-no-lazy-grab` to eliminate focus loss and typing lockouts.
+  - Configured with `scroll-method: 1;` and `hover-select: true;` across all themes to support smooth mouse-wheel scrolling and instant hover selection.
+- **Dynamic Polybar Network & Battery**: Polybar dynamically binds to the active network interface (`wlan0` / `eth0`) and hardware battery controller (`BAT0` / `BAT1`).
+- **Vimix Dark GRUB Theme**: Sleek bootloader interface with high-resolution iconography.
+
 ---
 
 ## 6. Step-by-Step Installation Guide
@@ -204,6 +227,7 @@ nano config.env
 ```
 Key configurable parameters:
 - `USERNAME` (default: `archie`)
+- `DEFAULT_SHELL` (default: `fish`, options: `fish` or `bash`)
 - `TIMEZONE` (default: `UTC`)
 - `LOCALE` (default: `en_US.UTF-8`)
 - `ENABLE_MULTILIB` (default: `true`)
@@ -214,6 +238,8 @@ Key configurable parameters:
 - `DISPLAY_MANAGER` (`lightdm` or `none`)
 - `TEXT_EDITOR` (default: `neovim`)
 - `INSTALL_ANTIGRAVITY_CLI` (default: `true`)
+- `AUTO_INSTALL_DOTFILES` (default: `true`)
+- `DOTFILES_REPO_URL` (default: `https://github.com/theduckchannel/bspwm-install.git`)
 - `DISK1` / `DISK2` / `BTRFS_MODE` (only needed if overriding auto-detection)
 
 ### Step 4: Validate with Dry-Run Simulation (Recommended)
@@ -379,9 +405,12 @@ antigravity-cli --version || agy --version
 ## 8. Keybindings Quick Reference
 
 ### BSPWM (`sxhkd`)
-- `Super + Return`: Launch terminal (`kitty` / `alacritty`)
-- `Super + d`: Application launcher (`rofi` drun mode — launch Firefox, VLC, Mousepad, etc.)
+- `Super + Return`: Launch terminal (`bspterm`: Alacritty / Kitty / XFCE4-terminal)
+- `Super + d` or `Alt + F1`: Application launcher (`rofi` drun mode — guaranteed focus & mouse wheel scroll)
+- `Ctrl + Alt + t`: Theme switcher (`bsptheme` — choose from 20+ palettes: Dracula, Nord, Gruvbox, etc.)
+- `Super + Alt + w`: Random wallpaper switcher (`feh`)
 - `Super + r`: Command runner (`rofi` run mode)
+- `Super + x`: Power menu & logout prompt (`rofi` powermenu)
 - `Super + q`: Close focused window
 - `Super + t`: Set window state to tiled
 - `Super + Shift + Space`: Toggle floating window
@@ -404,6 +433,8 @@ antigravity-cli --version || agy --version
 | **VLC Media Player** | `vlc &` | `Super + d` -> type `vlc` | Media Playback |
 | **Mousepad** | `mousepad &` | `Super + d` -> type `mousepad` | Lightweight GTK GUI Text Editor |
 | **Neovim** | `nvim <file>` | Terminal (`Super + Return`) | Primary Terminal Text Editor |
+| **Thunar** | `thunar &` | `Super + d` -> type `thunar` | Graphical File Manager |
+| **Theme Switcher** | `bsptheme` | `Ctrl + Alt + t` | Interactive 20+ Rice Palette Switcher |
 | **Antigravity CLI** | `antigravity-cli` or `agy` | Terminal (`Super + Return`) | Agentic AI Orchestration TUI |
 | **Paru** | `paru <pkg>` | Terminal (`Super + Return`) | AUR Package Helper & Pacman Wrapper |
 

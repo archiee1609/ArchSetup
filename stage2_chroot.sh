@@ -356,6 +356,18 @@ fi
 log_info "Installing GRUB EFI bootloader..."
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck
 
+# Deploy Vimix GRUB theme if available
+if [[ -d "${CONFIGS_DIR}/boot/grub-themes/Vimix" ]]; then
+    log_info "Deploying Vimix GRUB theme..."
+    mkdir -p /boot/grub/themes
+    cp -r "${CONFIGS_DIR}/boot/grub-themes/Vimix" /boot/grub/themes/
+    sed -i 's|^#\?GRUB_THEME=.*|GRUB_THEME="/boot/grub/themes/Vimix/theme.txt"|' /etc/default/grub
+    if ! grep -q "^GRUB_THEME=" /etc/default/grub; then
+        echo 'GRUB_THEME="/boot/grub/themes/Vimix/theme.txt"' >> /etc/default/grub
+    fi
+    log_success "Vimix GRUB theme configured."
+fi
+
 log_info "Generating GRUB configuration..."
 grub-mkconfig -o /boot/grub/grub.cfg
 
@@ -368,35 +380,71 @@ log_success "GRUB bootloader and snapshot watcher configured."
 # ------------------------------------------------------------------------------
 # 9. Window Manager, Userland & Tools
 # ------------------------------------------------------------------------------
-log_step "Installing Window Manager (${WM}) & Userland Applications"
+log_step "Installing Window Manager (${WM}), Shells & Rice Applications"
 
 COMMON_USERLAND_PACKAGES=(
+    # Core X11 Subsystem & Utilities
     xorg-server
     xorg-xinit
     xorg-xrandr
     xorg-xsetroot
+    xorg-xrdb
+    xorg-xkill
+    xorg-xprop
+
+    # Shells & Core Shell Completions
+    bash
+    bash-completion
+    fish
+
+    # Compositor, Menus & Visuals
     picom
     rofi
     feh
+    dunst
+    scrot
+    viewnior
+    xsettingsd
+    lxappearance
+    xfce4-power-manager
+    network-manager-applet
+
+    # File Manager & Thumbnail Generation
+    thunar
+    tumbler
+    raw-thumbnailer
+    thunar-archive-plugin
+    thunar-volman
+    ffmpegthumbnailer
+
+    # Audio & Media
+    alsa-utils
+    mpd
+    mpc
+
+    # Fonts & Icons
     ttf-jetbrains-mono-nerd
+    ttf-iosevka-nerd
+    ttf-fira-code
     noto-fonts
     noto-fonts-cjk
     noto-fonts-emoji
     papirus-icon-theme
+
+    # Display Manager
     lightdm
     lightdm-gtk-greeter
+
+    # Applications & Tools
     firefox
     vlc
     "${TEXT_EDITOR:-neovim}"
     mousepad
 )
 
-# Add selected terminal
+# Terminal Emulators (Install both Alacritty and XFCE4-terminal for full reliability, plus Kitty if selected)
+COMMON_USERLAND_PACKAGES+=(alacritty xfce4-terminal)
 if [[ "${TERMINAL}" == "kitty" ]]; then
-    COMMON_USERLAND_PACKAGES+=(kitty)
-elif [[ "${TERMINAL}" == "alacritty" ]]; then
-    COMMON_USERLAND_PACKAGES+=(alacritty)
-else
     COMMON_USERLAND_PACKAGES+=(kitty)
 fi
 
@@ -460,10 +508,28 @@ else
     passwd root
 fi
 
+# Ensure bash and fish are registered in /etc/shells
+for _sh in /usr/bin/bash /bin/bash /usr/bin/fish; do
+    if [[ -x "$_sh" ]] && ! grep -q "^${_sh}$" /etc/shells; then
+        echo "$_sh" >> /etc/shells
+    fi
+done
+
+# Resolve desired login shell
+USER_SHELL="/usr/bin/bash"
+if [[ "${DEFAULT_SHELL:-fish}" == "fish" ]] && command -v fish >/dev/null 2>&1; then
+    USER_SHELL="$(command -v fish)"
+elif command -v "${DEFAULT_SHELL:-bash}" >/dev/null 2>&1; then
+    USER_SHELL="$(command -v "${DEFAULT_SHELL:-bash}")"
+fi
+
 # Create non-root user
 if ! id "${USERNAME}" > /dev/null 2>&1; then
-    log_info "Creating user '${USERNAME}'..."
-    useradd -m -g users -G wheel,video,audio,input,storage,optical -s /bin/bash "${USERNAME}"
+    log_info "Creating user '${USERNAME}' with shell '${USER_SHELL}'..."
+    useradd -m -g users -G wheel,video,audio,input,storage,optical -s "${USER_SHELL}" "${USERNAME}"
+else
+    log_info "Updating user '${USERNAME}' shell to '${USER_SHELL}'..."
+    usermod -s "${USER_SHELL}" "${USERNAME}"
 fi
 
 log_info "Setting password for user '${USERNAME}'..."
@@ -543,54 +609,152 @@ fi
 # ------------------------------------------------------------------------------
 # 11. Dotfiles & Desktop Configuration Deployment
 # ------------------------------------------------------------------------------
-log_step "Deploying Idiomatic Dotfiles for ${USERNAME}"
+log_step "Deploying Idiomatic Dotfiles & Community Desktop Rice for ${USERNAME}"
 
 USER_HOME="/home/${USERNAME}"
 USER_CONFIG="${USER_HOME}/.config"
+DOTFILES_SRC="${CONFIGS_DIR}/dotfiles"
 
-mkdir -p "${USER_CONFIG}"/{picom,rofi,kitty,alacritty,bspwm,sxhkd,polybar}
-
-# Deploy Picom
-cp "${CONFIGS_DIR}/dotfiles/picom/picom.conf" "${USER_CONFIG}/picom/picom.conf"
-
-# Deploy Rofi
-cp "${CONFIGS_DIR}/dotfiles/rofi/config.rasi" "${USER_CONFIG}/rofi/config.rasi"
-
-# Deploy Terminals
-cp "${CONFIGS_DIR}/dotfiles/kitty/kitty.conf" "${USER_CONFIG}/kitty/kitty.conf"
-cp "${CONFIGS_DIR}/dotfiles/alacritty/alacritty.toml" "${USER_CONFIG}/alacritty/alacritty.toml"
-
-# Deploy BSPWM / SXHKD / Polybar
-cp "${CONFIGS_DIR}/dotfiles/bspwm/bspwmrc" "${USER_CONFIG}/bspwm/bspwmrc"
-chmod +x "${USER_CONFIG}/bspwm/bspwmrc"
-
-cp "${CONFIGS_DIR}/dotfiles/sxhkd/sxhkdrc" "${USER_CONFIG}/sxhkd/sxhkdrc"
-cp "${CONFIGS_DIR}/dotfiles/polybar/config.ini" "${USER_CONFIG}/polybar/config.ini"
-cp "${CONFIGS_DIR}/dotfiles/polybar/launch.sh" "${USER_CONFIG}/polybar/launch.sh"
-chmod +x "${USER_CONFIG}/polybar/launch.sh"
-
-# Tailor Polybar battery module based on detected battery presence
-if [[ "${HAS_BATTERY:-0}" -eq 1 ]]; then
-    if [[ -n "${BATTERY_NAME:-}" ]]; then
-        sed -i "s/^battery = BAT0/battery = ${BATTERY_NAME}/" "${USER_CONFIG}/polybar/config.ini"
+# Automatically fetch/refresh latest community dotfiles if requested and network is reachable
+if [[ "${AUTO_INSTALL_DOTFILES:-true}" == "true" && -n "${DOTFILES_REPO_URL:-}" ]]; then
+    log_info "Checking for remote community dotfiles (${DOTFILES_REPO_URL})..."
+    DOTFILES_CLONE_DIR="/tmp/community-dotfiles-repo"
+    rm -rf "${DOTFILES_CLONE_DIR}"
+    if git clone --depth=1 "${DOTFILES_REPO_URL}" "${DOTFILES_CLONE_DIR}" 2>/dev/null; then
+        log_success "Successfully fetched remote community dotfiles from GitHub."
+        if [[ -d "${DOTFILES_CLONE_DIR}/dotfiles" ]]; then
+            cp -rf "${DOTFILES_CLONE_DIR}/dotfiles/." "${DOTFILES_SRC}/" 2>/dev/null || true
+        fi
+        rm -rf "${DOTFILES_CLONE_DIR}"
+    else
+        log_info "Remote repository unavailable; utilizing local pre-bundled community dotfiles."
     fi
-    if [[ -n "${ADAPTER_NAME:-}" ]]; then
-        sed -i "s/^adapter = ADP1/adapter = ${ADAPTER_NAME}/" "${USER_CONFIG}/polybar/config.ini"
-    fi
-    log_info "Polybar battery module configured for ${BATTERY_NAME:-BAT0} and ${ADAPTER_NAME:-AC}."
-else
-    # Remove battery module from top bar on desktop or VM
-    sed -i 's/modules-right = cpu memory battery pulseaudio date/modules-right = cpu memory pulseaudio date/' "${USER_CONFIG}/polybar/config.ini"
-    log_info "Battery not present; disabled battery module in Polybar."
 fi
 
-# Deploy xinitrc fallback
-cp "${CONFIGS_DIR}/dotfiles/xinitrc" "${USER_HOME}/.xinitrc"
-chmod +x "${USER_HOME}/.xinitrc"
+# Ensure all target user configuration directories exist
+mkdir -p "${USER_CONFIG}"/{bspwm,sxhkd,polybar,rofi,kitty,alacritty,dunst,fish,picom}
+mkdir -p "${USER_HOME}"/{.local/bin,Pictures,Documents,Downloads,.Xresources.d}
 
-# Fix permissions
+# 1. Shell Configurations (Bash & Fish)
+log_info "Deploying shell configurations (bash & fish)..."
+if [[ -f "${DOTFILES_SRC}/bash/.bashrc" ]]; then
+    cp "${DOTFILES_SRC}/bash/.bashrc" "${USER_HOME}/.bashrc"
+fi
+if [[ -f "${DOTFILES_SRC}/bash/.bash_profile" ]]; then
+    cp "${DOTFILES_SRC}/bash/.bash_profile" "${USER_HOME}/.bash_profile"
+fi
+if [[ -f "${DOTFILES_SRC}/fish/config.fish" ]]; then
+    cp "${DOTFILES_SRC}/fish/config.fish" "${USER_CONFIG}/fish/config.fish"
+fi
+
+# 2. Window Manager & Ricing Suites (BSPWM, SXHKD, Polybar, Dunst, Rofi)
+log_info "Deploying BSPWM, SXHKD, Polybar, Dunst & Rofi suites..."
+if [[ -d "${DOTFILES_SRC}/bspwm" ]]; then
+    cp -rf "${DOTFILES_SRC}/bspwm/." "${USER_CONFIG}/bspwm/"
+fi
+if [[ -d "${DOTFILES_SRC}/sxhkd" ]]; then
+    cp -rf "${DOTFILES_SRC}/sxhkd/." "${USER_CONFIG}/sxhkd/"
+fi
+if [[ -d "${DOTFILES_SRC}/polybar" ]]; then
+    cp -rf "${DOTFILES_SRC}/polybar/." "${USER_CONFIG}/polybar/"
+fi
+if [[ -d "${DOTFILES_SRC}/rofi" ]]; then
+    cp -rf "${DOTFILES_SRC}/rofi/." "${USER_CONFIG}/rofi/"
+fi
+if [[ -d "${DOTFILES_SRC}/dunst" ]]; then
+    cp -rf "${DOTFILES_SRC}/dunst/." "${USER_CONFIG}/dunst/"
+fi
+
+# 3. Terminal Emulator Configurations (Alacritty & Kitty)
+log_info "Deploying terminal configurations (Alacritty & Kitty)..."
+if [[ -d "${DOTFILES_SRC}/alacritty" ]]; then
+    cp -rf "${DOTFILES_SRC}/alacritty/." "${USER_CONFIG}/alacritty/"
+fi
+if [[ -f "${USER_CONFIG}/bspwm/alacritty/alacritty.toml" ]]; then
+    cp "${USER_CONFIG}/bspwm/alacritty/alacritty.toml" "${USER_CONFIG}/alacritty/alacritty.toml"
+fi
+if [[ -d "${DOTFILES_SRC}/kitty" ]]; then
+    cp -rf "${DOTFILES_SRC}/kitty/." "${USER_CONFIG}/kitty/"
+fi
+
+# 4. Picom Compositor Configuration
+if [[ -f "${DOTFILES_SRC}/picom/picom.conf" ]]; then
+    cp "${DOTFILES_SRC}/picom/picom.conf" "${USER_CONFIG}/picom/picom.conf"
+fi
+if [[ -f "${USER_CONFIG}/bspwm/compton.conf" && ! -f "${USER_CONFIG}/picom/picom.conf" ]]; then
+    cp "${USER_CONFIG}/bspwm/compton.conf" "${USER_CONFIG}/picom/picom.conf"
+fi
+
+# 5. Xresources, Theming & Desktop Session Files
+if [[ -d "${DOTFILES_SRC}/Xresources/.Xresources.d" ]]; then
+    cp -rf "${DOTFILES_SRC}/Xresources/.Xresources.d/." "${USER_HOME}/.Xresources.d/"
+fi
+if [[ -f "${DOTFILES_SRC}/Xresources/.Xresources" ]]; then
+    cp "${DOTFILES_SRC}/Xresources/.Xresources" "${USER_HOME}/.Xresources"
+elif [[ -f "${DOTFILES_SRC}/.Xresources" ]]; then
+    cp "${DOTFILES_SRC}/.Xresources" "${USER_HOME}/.Xresources"
+fi
+
+# Pre-populate default Nord colors if missing
+if [[ ! -f "${USER_HOME}/.Xresources.d/colors" && -f "${USER_CONFIG}/bspwm/themes/nord" ]]; then
+    cp "${USER_CONFIG}/bspwm/themes/nord" "${USER_HOME}/.Xresources.d/colors"
+fi
+
+# Supporting user environment files
+[[ -f "${DOTFILES_SRC}/.xsettingsd" ]] && cp "${DOTFILES_SRC}/.xsettingsd" "${USER_HOME}/.xsettingsd"
+[[ -f "${DOTFILES_SRC}/.fehbg" ]] && cp "${DOTFILES_SRC}/.fehbg" "${USER_HOME}/.fehbg"
+[[ -f "${DOTFILES_SRC}/.vimrc" ]] && cp "${DOTFILES_SRC}/.vimrc" "${USER_HOME}/.vimrc"
+[[ -f "${DOTFILES_SRC}/xinitrc" ]] && cp "${DOTFILES_SRC}/xinitrc" "${USER_HOME}/.xinitrc"
+
+# 6. Ensure Execution Bits on All Scripts
+log_info "Configuring execution permissions for scripts..."
+chmod +x "${USER_CONFIG}/bspwm/bspwmrc" 2>/dev/null || true
+chmod +x "${USER_CONFIG}/bspwm/bin/"* 2>/dev/null || true
+chmod +x "${USER_CONFIG}/bspwm/rofi/bin/"* 2>/dev/null || true
+chmod +x "${USER_CONFIG}/bspwm/themes/set-theme" 2>/dev/null || true
+chmod +x "${USER_CONFIG}/polybar/launch.sh" 2>/dev/null || true
+chmod +x "${USER_CONFIG}/dunst/"*.sh 2>/dev/null || true
+chmod +x "${USER_HOME}/.fehbg" 2>/dev/null || true
+chmod +x "${USER_HOME}/.xinitrc" 2>/dev/null || true
+
+# 7. Pre-synchronize Colors for First Login
+if [[ -x "${USER_CONFIG}/bspwm/bin/bspcolors" ]]; then
+    su - "${USERNAME}" -c "bash ${USER_CONFIG}/bspwm/bin/bspcolors" 2>/dev/null || true
+fi
+
+# 8. Adaptive Hardware Customization for Polybar
+# Dynamically adapt primary network interface
+PRIMARY_NET_IFACE="$(ip -o link show 2>/dev/null | awk -F': ' '$2 !~ "lo|vir|docker" {print $2; exit}' || echo "")"
+if [[ -n "$PRIMARY_NET_IFACE" ]]; then
+    for _pcfg in "${USER_CONFIG}/bspwm/polybar/config" "${USER_CONFIG}/polybar/config.ini"; do
+        if [[ -f "$_pcfg" ]]; then
+            sed -i "s/interface = wlan0/interface = ${PRIMARY_NET_IFACE}/" "$_pcfg"
+        fi
+    done
+    log_info "Configured Polybar network interface to '${PRIMARY_NET_IFACE}'."
+fi
+
+# Tailor Polybar battery module based on detected battery presence
+for _pcfg in "${USER_CONFIG}/polybar/config.ini" "${USER_CONFIG}/bspwm/polybar/config"; do
+    [[ ! -f "$_pcfg" ]] && continue
+    if [[ "${HAS_BATTERY:-0}" -eq 1 ]]; then
+        if [[ -n "${BATTERY_NAME:-}" ]]; then
+            sed -i "s/^battery = BAT[0-9]/battery = ${BATTERY_NAME}/" "$_pcfg"
+        fi
+        if [[ -n "${ADAPTER_NAME:-}" ]]; then
+            sed -i "s/^adapter = .*/adapter = ${ADAPTER_NAME}/" "$_pcfg"
+        fi
+        log_info "Polybar battery module configured for ${BATTERY_NAME:-BAT0} and ${ADAPTER_NAME:-AC}."
+    else
+        sed -i 's/modules-right = cpu memory filesystem backlight battery network volume date/modules-right = cpu memory filesystem network volume date/' "$_pcfg"
+        sed -i 's/modules-right = cpu memory battery pulseaudio date/modules-right = cpu memory pulseaudio date/' "$_pcfg"
+        log_info "Battery not present; disabled battery module in Polybar."
+    fi
+done
+
+# 9. Finalize Ownership
 chown -R "${USERNAME}:users" "${USER_HOME}"
-log_success "Dotfiles deployed to ${USER_HOME}/.config/."
+log_success "Community dotfiles deployed to ${USER_HOME}/.config/ and permissions set."
 
 # ------------------------------------------------------------------------------
 # 12. System Services Enablement
