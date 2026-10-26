@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Stage 2: Post-Chroot System Configuration & Environment Provisioning
-# Hardware-Aware & Adaptive (Intel/AMD/NVIDIA/VMs, Laptops, Desktops)
+# Hardware-Aware & Adaptive (Supports Btrfs/ext4/XFS/F2FS, BSPWM/GNOME,
+# LightDM/GDM, Intel/AMD/NVIDIA/VMs, Laptops, Desktops)
 # ==============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Capture any environment variable overrides
+_OVERRIDE_FILESYSTEM="${FILESYSTEM:-${FS_TYPE:-}}"
+_OVERRIDE_DESKTOP_ENV="${DESKTOP_ENV:-${WM:-}}"
+_OVERRIDE_DISPLAY_MANAGER="${DISPLAY_MANAGER:-}"
 
 # Source common library and user configuration
 if [[ -f "${SCRIPT_DIR}/lib/common.sh" ]]; then
@@ -41,6 +47,24 @@ if [[ -f "${SCRIPT_DIR}/hardware.env" ]]; then
 elif [[ "${AUTO_DETECT_HARDWARE:-true}" == "true" ]]; then
     detect_hardware
     apply_hardware_profile
+fi
+
+# Re-apply explicit environment overrides
+[[ -n "$_OVERRIDE_FILESYSTEM" ]] && FILESYSTEM="$_OVERRIDE_FILESYSTEM"
+[[ -n "$_OVERRIDE_DESKTOP_ENV" ]] && DESKTOP_ENV="$_OVERRIDE_DESKTOP_ENV"
+[[ -n "$_OVERRIDE_DISPLAY_MANAGER" ]] && DISPLAY_MANAGER="$_OVERRIDE_DISPLAY_MANAGER"
+
+# Resolve filesystem and desktop options
+FILESYSTEM="${FILESYSTEM:-${FS_TYPE:-btrfs}}"
+FS_TYPE="${FILESYSTEM}"
+DESKTOP_ENV="${DESKTOP_ENV:-${WM:-bspwm}}"
+WM="${DESKTOP_ENV}"
+if [[ -z "${DISPLAY_MANAGER:-}" ]]; then
+    if [[ "${DESKTOP_ENV}" == "gnome" ]]; then
+        DISPLAY_MANAGER="gdm"
+    else
+        DISPLAY_MANAGER="lightdm"
+    fi
 fi
 
 CONFIGS_DIR="${SCRIPT_DIR}/configs"
@@ -100,17 +124,14 @@ fi
 # 2. Enable Chaotic-AUR Repository
 if [[ "${ENABLE_CHAOTIC_AUR:-true}" == "true" ]]; then
     log_info "Activating Chaotic-AUR repository..."
-    # Retrieve and sign Chaotic-AUR primary signing key
     pacman-key --recv-key 3056513887B78AEB --keyserver keyserver.ubuntu.com 2>/dev/null || \
     pacman-key --recv-key 3056513887B78AEB --keyserver hkps://keyserver.ubuntu.com 2>/dev/null || true
     pacman-key --lsign-key 3056513887B78AEB 2>/dev/null || true
 
-    # Install chaotic-keyring and chaotic-mirrorlist
     log_info "Installing Chaotic-AUR keyring and mirrorlist..."
     pacman -U --noconfirm --needed 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst' 2>/dev/null || true
     pacman -U --noconfirm --needed 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst' 2>/dev/null || true
 
-    # Append [chaotic-aur] configuration if missing
     if ! grep -q "^\[chaotic-aur\]" /etc/pacman.conf; then
         cat <<EOF >> /etc/pacman.conf
 
@@ -141,7 +162,6 @@ fi
 # ------------------------------------------------------------------------------
 log_step "Installing Graphics Drivers & PRIME Offload Utilities"
 
-# Fallback graphics packages if not pre-populated
 if [[ ${#GRAPHICS_PACKAGES[@]} -eq 0 ]]; then
     GRAPHICS_PACKAGES=(
         mesa
@@ -235,7 +255,6 @@ if [[ "${IS_VM:-0}" -eq 1 ]]; then
             ;;
     esac
 else
-    # Physical system: configure TLP and thermald
     POWER_PACKAGES=(
         tlp
         tlp-rdw
@@ -246,7 +265,6 @@ else
         POWER_PACKAGES+=(brightnessctl)
     fi
 
-    # thermald is an Intel-specific thermal daemon; skip on AMD CPUs
     if [[ "${DETECTED_CPU_VENDOR:-}" == "Intel" && "${CHASSIS_TYPE:-desktop}" == "laptop" ]]; then
         POWER_PACKAGES+=(thermald)
     fi
@@ -256,11 +274,9 @@ else
     mkdir -p /etc/tlp.d
     if [[ -f "${CONFIGS_DIR}/power/tlp.conf" ]]; then
         cp "${CONFIGS_DIR}/power/tlp.conf" /etc/tlp.d/00-hardware-throttling.conf
-        # Adapt governor if CPU is AMD
         if [[ "${DETECTED_CPU_VENDOR:-}" == "AMD" ]]; then
             sed -i 's/CPU_SCALING_GOVERNOR_ON_AC=powersave/CPU_SCALING_GOVERNOR_ON_AC=powersave/' /etc/tlp.d/00-hardware-throttling.conf
         fi
-        # If Desktop, don't cap battery perf
         if [[ "${CHASSIS_TYPE:-desktop}" == "desktop" ]]; then
             sed -i 's/CPU_MAX_PERF_ON_BAT=70/CPU_MAX_PERF_ON_BAT=100/' /etc/tlp.d/00-hardware-throttling.conf
         fi
@@ -298,7 +314,6 @@ log_step "Configuring Early KMS & Generating Initramfs"
 if [[ -f "${CONFIGS_DIR}/boot/mkinitcpio.conf" ]]; then
     cp "${CONFIGS_DIR}/boot/mkinitcpio.conf" /etc/mkinitcpio.conf
 else
-    # Fallback template
     cat <<EOF > /etc/mkinitcpio.conf
 MODULES=()
 BINARIES=()
@@ -315,6 +330,15 @@ if [[ -n "${KMS_MODULES:-}" ]]; then
 else
     sed -i "s/^MODULES=.*/MODULES=()/" /etc/mkinitcpio.conf
     log_info "Configured standard KMS (no early modules required)."
+fi
+
+# Dynamically configure initramfs hooks based on filesystem
+if [[ "${FILESYSTEM}" == "btrfs" ]]; then
+    sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block btrfs filesystems fsck)/' /etc/mkinitcpio.conf
+    log_info "Configured Btrfs initramfs hooks."
+else
+    sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block filesystems fsck)/' /etc/mkinitcpio.conf
+    log_info "Configured standard filesystem initramfs hooks (${FILESYSTEM})."
 fi
 
 log_info "Generating kernel initramfs (mkinitcpio -P)..."
@@ -344,6 +368,22 @@ GRUB_DISABLE_OS_PROBER=true
 EOF
 fi
 
+# Dynamically adjust GRUB_PRELOAD_MODULES based on filesystem
+case "${FILESYSTEM}" in
+    btrfs)
+        sed -i 's/^GRUB_PRELOAD_MODULES=.*/GRUB_PRELOAD_MODULES="part_gpt part_msdos btrfs"/' /etc/default/grub
+        ;;
+    ext4)
+        sed -i 's/^GRUB_PRELOAD_MODULES=.*/GRUB_PRELOAD_MODULES="part_gpt part_msdos ext2"/' /etc/default/grub
+        ;;
+    xfs)
+        sed -i 's/^GRUB_PRELOAD_MODULES=.*/GRUB_PRELOAD_MODULES="part_gpt part_msdos xfs"/' /etc/default/grub
+        ;;
+    f2fs)
+        sed -i 's/^GRUB_PRELOAD_MODULES=.*/GRUB_PRELOAD_MODULES="part_gpt part_msdos f2fs"/' /etc/default/grub
+        ;;
+esac
+
 # Dynamically inject tailored kernel command line flags
 if [[ -n "${KERNEL_CMDLINE_EXTRA:-}" ]]; then
     sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"loglevel=3 quiet ${KERNEL_CMDLINE_EXTRA}\"|" /etc/default/grub
@@ -371,117 +411,138 @@ fi
 log_info "Generating GRUB configuration..."
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# Enable grub-btrfs daemon to watch for new Btrfs snapshots
-if systemctl list-unit-files 2>/dev/null | grep -q grub-btrfsd; then
+# Enable grub-btrfs daemon only if Btrfs is used
+if [[ "${FILESYSTEM}" == "btrfs" ]] && systemctl list-unit-files 2>/dev/null | grep -q grub-btrfsd; then
     systemctl enable grub-btrfsd.service || true
+    log_info "Enabled grub-btrfsd snapshot daemon."
 fi
-log_success "GRUB bootloader and snapshot watcher configured."
+log_success "GRUB bootloader configured."
 
 # ------------------------------------------------------------------------------
-# 9. Window Manager, Userland & Tools
+# 9. Desktop Environment, Display Manager & Applications
 # ------------------------------------------------------------------------------
-log_step "Installing Window Manager (${WM}), Shells & Rice Applications"
+log_step "Installing Desktop Environment (${DESKTOP_ENV}) & Display Manager (${DISPLAY_MANAGER})"
 
-COMMON_USERLAND_PACKAGES=(
-    # Core X11 Subsystem & Utilities
-    xorg-server
-    xorg-xinit
-    xorg-xrandr
-    xorg-xsetroot
-    xorg-xrdb
-    xorg-xkill
-    xorg-xprop
-
-    # Shells & Core Shell Completions
+COMMON_APPS=(
     bash
     bash-completion
     fish
-
-    # Compositor, Menus & Visuals
-    picom
-    rofi
-    feh
-    dunst
-    scrot
-    viewnior
-    xsettingsd
-    lxappearance
-    xfce4-power-manager
-    network-manager-applet
-
-    # File Manager & Thumbnail Generation
-    thunar
-    tumbler
-    raw-thumbnailer
-    thunar-archive-plugin
-    thunar-volman
-    ffmpegthumbnailer
-
-    # Audio & Media
-    alsa-utils
-    mpd
-    mpc
-
-    # Fonts & Icons
+    firefox
+    vlc
+    "${TEXT_EDITOR:-neovim}"
+    mousepad
+    alacritty
     ttf-jetbrains-mono-nerd
-    ttf-iosevka-nerd
     ttf-fira-code
     noto-fonts
     noto-fonts-cjk
     noto-fonts-emoji
     papirus-icon-theme
-
-    # Display Manager
-    lightdm
-    lightdm-gtk-greeter
-
-    # Applications & Tools
-    firefox
-    vlc
-    "${TEXT_EDITOR:-neovim}"
-    mousepad
 )
-
-# Terminal Emulators (Install both Alacritty and XFCE4-terminal for full reliability, plus Kitty if selected)
-COMMON_USERLAND_PACKAGES+=(alacritty xfce4-terminal)
 if [[ "${TERMINAL}" == "kitty" ]]; then
-    COMMON_USERLAND_PACKAGES+=(kitty)
+    COMMON_APPS+=(kitty)
 fi
 
-# Add WM packages (BSPWM)
-WM_PACKAGES=()
-if [[ "${WM}" == "bspwm" ]]; then
-    WM_PACKAGES=(bspwm sxhkd polybar)
+if [[ "${DESKTOP_ENV}" == "gnome" ]]; then
+    log_info "Preparing GNOME Desktop Environment package stack..."
+    GNOME_STACK=(
+        gnome
+        gnome-tweaks
+    )
+
+    if [[ "${DISPLAY_MANAGER}" == "gdm" ]]; then
+        GNOME_STACK+=(gdm)
+    elif [[ "${DISPLAY_MANAGER}" == "lightdm" ]]; then
+        GNOME_STACK+=(lightdm lightdm-gtk-greeter)
+    fi
+
+    pacman -S --noconfirm --needed "${COMMON_APPS[@]}" "${GNOME_STACK[@]}"
+
+    if [[ "${DISPLAY_MANAGER}" == "lightdm" && -f /etc/lightdm/lightdm.conf ]]; then
+        sed -i 's/^#\?greeter-session=.*/greeter-session=lightdm-gtk-greeter/' /etc/lightdm/lightdm.conf 2>/dev/null || true
+        sed -i 's/^#\?user-session=.*/user-session=gnome/' /etc/lightdm/lightdm.conf 2>/dev/null || true
+    fi
+
+    log_success "GNOME desktop environment and display manager (${DISPLAY_MANAGER}) installed."
+
 else
-    log_error "Unknown WM: '${WM}'. Only 'bspwm' is supported."
-    exit 1
-fi
+    # Default: BSPWM Tiling Window Manager Stack
+    log_info "Preparing BSPWM & X11 userland package stack..."
+    BSPWM_STACK=(
+        # Core X11 Subsystem & Utilities
+        xorg-server
+        xorg-xinit
+        xorg-xrandr
+        xorg-xsetroot
+        xorg-xrdb
+        xorg-xkill
+        xorg-xprop
 
-pacman -S --noconfirm --needed "${COMMON_USERLAND_PACKAGES[@]}" "${WM_PACKAGES[@]}"
+        # Window Manager & Utilities
+        bspwm
+        sxhkd
+        polybar
+        picom
+        rofi
+        feh
+        dunst
+        scrot
+        viewnior
+        xsettingsd
+        lxappearance
+        xfce4-power-manager
+        network-manager-applet
+        xfce4-terminal
 
-# Configure LightDM and GTK Greeter
-if [[ -f /etc/lightdm/lightdm.conf ]]; then
-    log_info "Configuring LightDM GTK Greeter & session..."
-    if grep -q "^#\?greeter-session=" /etc/lightdm/lightdm.conf; then
-        sed -i 's/^#\?greeter-session=.*/greeter-session=lightdm-gtk-greeter/' /etc/lightdm/lightdm.conf
-    else
-        sed -i '/^\[Seat:\*\]/a greeter-session=lightdm-gtk-greeter' /etc/lightdm/lightdm.conf
+        # File Manager & Thumbnails
+        thunar
+        tumbler
+        raw-thumbnailer
+        thunar-archive-plugin
+        thunar-volman
+        ffmpegthumbnailer
+
+        # Audio & Additional Fonts
+        alsa-utils
+        mpd
+        mpc
+        ttf-iosevka-nerd
+    )
+
+    if [[ "${DISPLAY_MANAGER}" == "lightdm" ]]; then
+        BSPWM_STACK+=(lightdm lightdm-gtk-greeter)
+    elif [[ "${DISPLAY_MANAGER}" == "gdm" ]]; then
+        BSPWM_STACK+=(gdm)
     fi
-    if grep -q "^#\?user-session=" /etc/lightdm/lightdm.conf; then
-        sed -i 's/^#\?user-session=.*/user-session=bspwm/' /etc/lightdm/lightdm.conf
-    fi
-fi
 
-# Ensure BSPWM desktop session entry exists for display managers
-mkdir -p /usr/share/xsessions
-if [[ ! -f /usr/share/xsessions/bspwm.desktop ]]; then
-    cat <<'EOF' > /usr/share/xsessions/bspwm.desktop
+    pacman -S --noconfirm --needed "${COMMON_APPS[@]}" "${BSPWM_STACK[@]}"
+
+    # Configure LightDM and GTK Greeter
+    if [[ "${DISPLAY_MANAGER}" == "lightdm" && -f /etc/lightdm/lightdm.conf ]]; then
+        log_info "Configuring LightDM GTK Greeter & session for bspwm..."
+        if grep -q "^#\?greeter-session=" /etc/lightdm/lightdm.conf; then
+            sed -i 's/^#\?greeter-session=.*/greeter-session=lightdm-gtk-greeter/' /etc/lightdm/lightdm.conf
+        else
+            sed -i '/^\[Seat:\*\]/a greeter-session=lightdm-gtk-greeter' /etc/lightdm/lightdm.conf
+        fi
+        if grep -q "^#\?user-session=" /etc/lightdm/lightdm.conf; then
+            sed -i 's/^#\?user-session=.*/user-session=bspwm/' /etc/lightdm/lightdm.conf
+        fi
+    fi
+
+    # Ensure BSPWM desktop session entry exists for display managers
+    mkdir -p /usr/share/xsessions
+    if [[ ! -f /usr/share/xsessions/bspwm.desktop ]]; then
+        cat <<'EOF' > /usr/share/xsessions/bspwm.desktop
 [Desktop Entry]
 Name=bspwm
 Comment=Binary space partitioning window manager
 Exec=bspwm
 Type=Application
 EOF
+    fi
+
+    log_success "BSPWM desktop environment and display manager (${DISPLAY_MANAGER}) installed."
 fi
 
 # Configure system-wide default text editor environment
@@ -491,8 +552,6 @@ export EDITOR="${TEXT_EDITOR:-neovim}"
 export VISUAL="${TEXT_EDITOR:-neovim}"
 EOF
 chmod +x /etc/profile.d/editor.sh
-
-log_success "Window manager, LightDM, desktop applications & utilities installed."
 
 # ------------------------------------------------------------------------------
 # 10. User Provisioning & Permissions
@@ -609,33 +668,17 @@ fi
 # ------------------------------------------------------------------------------
 # 11. Dotfiles & Desktop Configuration Deployment
 # ------------------------------------------------------------------------------
-log_step "Deploying Idiomatic Dotfiles & Community Desktop Rice for ${USERNAME}"
+log_step "Deploying Idiomatic Dotfiles for ${USERNAME}"
 
 USER_HOME="/home/${USERNAME}"
 USER_CONFIG="${USER_HOME}/.config"
 DOTFILES_SRC="${CONFIGS_DIR}/dotfiles"
 
-# Automatically fetch/refresh latest community dotfiles if requested and network is reachable
-if [[ "${AUTO_INSTALL_DOTFILES:-true}" == "true" && -n "${DOTFILES_REPO_URL:-}" ]]; then
-    log_info "Checking for remote community dotfiles (${DOTFILES_REPO_URL})..."
-    DOTFILES_CLONE_DIR="/tmp/community-dotfiles-repo"
-    rm -rf "${DOTFILES_CLONE_DIR}"
-    if git clone --depth=1 "${DOTFILES_REPO_URL}" "${DOTFILES_CLONE_DIR}" 2>/dev/null; then
-        log_success "Successfully fetched remote community dotfiles from GitHub."
-        if [[ -d "${DOTFILES_CLONE_DIR}/dotfiles" ]]; then
-            cp -rf "${DOTFILES_CLONE_DIR}/dotfiles/." "${DOTFILES_SRC}/" 2>/dev/null || true
-        fi
-        rm -rf "${DOTFILES_CLONE_DIR}"
-    else
-        log_info "Remote repository unavailable; utilizing local pre-bundled community dotfiles."
-    fi
-fi
+# Ensure user directories exist
+mkdir -p "${USER_HOME}"/{.local/bin,Pictures,Documents,Downloads}
+mkdir -p "${USER_CONFIG}"/{fish,alacritty,kitty}
 
-# Ensure all target user configuration directories exist
-mkdir -p "${USER_CONFIG}"/{bspwm,sxhkd,polybar,rofi,kitty,alacritty,dunst,fish,picom}
-mkdir -p "${USER_HOME}"/{.local/bin,Pictures,Documents,Downloads,.Xresources.d}
-
-# 1. Shell Configurations (Bash & Fish)
+# Deploy Shell Configurations (Bash & Fish)
 log_info "Deploying shell configurations (bash & fish)..."
 if [[ -f "${DOTFILES_SRC}/bash/.bashrc" ]]; then
     cp "${DOTFILES_SRC}/bash/.bashrc" "${USER_HOME}/.bashrc"
@@ -647,114 +690,135 @@ if [[ -f "${DOTFILES_SRC}/fish/config.fish" ]]; then
     cp "${DOTFILES_SRC}/fish/config.fish" "${USER_CONFIG}/fish/config.fish"
 fi
 
-# 2. Window Manager & Ricing Suites (BSPWM, SXHKD, Polybar, Dunst, Rofi)
-log_info "Deploying BSPWM, SXHKD, Polybar, Dunst & Rofi suites..."
-if [[ -d "${DOTFILES_SRC}/bspwm" ]]; then
-    cp -rf "${DOTFILES_SRC}/bspwm/." "${USER_CONFIG}/bspwm/"
-fi
-if [[ -d "${DOTFILES_SRC}/sxhkd" ]]; then
-    cp -rf "${DOTFILES_SRC}/sxhkd/." "${USER_CONFIG}/sxhkd/"
-fi
-if [[ -d "${DOTFILES_SRC}/polybar" ]]; then
-    cp -rf "${DOTFILES_SRC}/polybar/." "${USER_CONFIG}/polybar/"
-fi
-if [[ -d "${DOTFILES_SRC}/rofi" ]]; then
-    cp -rf "${DOTFILES_SRC}/rofi/." "${USER_CONFIG}/rofi/"
-fi
-if [[ -d "${DOTFILES_SRC}/dunst" ]]; then
-    cp -rf "${DOTFILES_SRC}/dunst/." "${USER_CONFIG}/dunst/"
-fi
-
-# 3. Terminal Emulator Configurations (Alacritty & Kitty)
+# Deploy Terminal Emulator Configurations (Alacritty & Kitty)
 log_info "Deploying terminal configurations (Alacritty & Kitty)..."
 if [[ -d "${DOTFILES_SRC}/alacritty" ]]; then
     cp -rf "${DOTFILES_SRC}/alacritty/." "${USER_CONFIG}/alacritty/"
-fi
-if [[ -f "${USER_CONFIG}/bspwm/alacritty/alacritty.toml" ]]; then
-    cp "${USER_CONFIG}/bspwm/alacritty/alacritty.toml" "${USER_CONFIG}/alacritty/alacritty.toml"
 fi
 if [[ -d "${DOTFILES_SRC}/kitty" ]]; then
     cp -rf "${DOTFILES_SRC}/kitty/." "${USER_CONFIG}/kitty/"
 fi
 
-# 4. Picom Compositor Configuration
-if [[ -f "${DOTFILES_SRC}/picom/picom.conf" ]]; then
-    cp "${DOTFILES_SRC}/picom/picom.conf" "${USER_CONFIG}/picom/picom.conf"
-fi
-if [[ -f "${USER_CONFIG}/bspwm/compton.conf" && ! -f "${USER_CONFIG}/picom/picom.conf" ]]; then
-    cp "${USER_CONFIG}/bspwm/compton.conf" "${USER_CONFIG}/picom/picom.conf"
-fi
-
-# 5. Xresources, Theming & Desktop Session Files
-if [[ -d "${DOTFILES_SRC}/Xresources/.Xresources.d" ]]; then
-    cp -rf "${DOTFILES_SRC}/Xresources/.Xresources.d/." "${USER_HOME}/.Xresources.d/"
-fi
-if [[ -f "${DOTFILES_SRC}/Xresources/.Xresources" ]]; then
-    cp "${DOTFILES_SRC}/Xresources/.Xresources" "${USER_HOME}/.Xresources"
-elif [[ -f "${DOTFILES_SRC}/.Xresources" ]]; then
-    cp "${DOTFILES_SRC}/.Xresources" "${USER_HOME}/.Xresources"
-fi
-
-# Pre-populate default Nord colors if missing
-if [[ ! -f "${USER_HOME}/.Xresources.d/colors" && -f "${USER_CONFIG}/bspwm/themes/nord" ]]; then
-    cp "${USER_CONFIG}/bspwm/themes/nord" "${USER_HOME}/.Xresources.d/colors"
-fi
-
 # Supporting user environment files
-[[ -f "${DOTFILES_SRC}/.xsettingsd" ]] && cp "${DOTFILES_SRC}/.xsettingsd" "${USER_HOME}/.xsettingsd"
-[[ -f "${DOTFILES_SRC}/.fehbg" ]] && cp "${DOTFILES_SRC}/.fehbg" "${USER_HOME}/.fehbg"
 [[ -f "${DOTFILES_SRC}/.vimrc" ]] && cp "${DOTFILES_SRC}/.vimrc" "${USER_HOME}/.vimrc"
-[[ -f "${DOTFILES_SRC}/xinitrc" ]] && cp "${DOTFILES_SRC}/xinitrc" "${USER_HOME}/.xinitrc"
 
-# 6. Ensure Execution Bits on All Scripts
-log_info "Configuring execution permissions for scripts..."
-chmod +x "${USER_CONFIG}/bspwm/bspwmrc" 2>/dev/null || true
-chmod +x "${USER_CONFIG}/bspwm/bin/"* 2>/dev/null || true
-chmod +x "${USER_CONFIG}/bspwm/rofi/bin/"* 2>/dev/null || true
-chmod +x "${USER_CONFIG}/bspwm/themes/set-theme" 2>/dev/null || true
-chmod +x "${USER_CONFIG}/polybar/launch.sh" 2>/dev/null || true
-chmod +x "${USER_CONFIG}/dunst/"*.sh 2>/dev/null || true
-chmod +x "${USER_HOME}/.fehbg" 2>/dev/null || true
-chmod +x "${USER_HOME}/.xinitrc" 2>/dev/null || true
+# If BSPWM is selected, deploy full rice suite
+if [[ "${DESKTOP_ENV}" == "bspwm" ]]; then
+    log_info "Deploying BSPWM tiling rice configurations..."
 
-# 7. Pre-synchronize Colors for First Login
-if [[ -x "${USER_CONFIG}/bspwm/bin/bspcolors" ]]; then
-    su - "${USERNAME}" -c "bash ${USER_CONFIG}/bspwm/bin/bspcolors" 2>/dev/null || true
-fi
+    # Automatically fetch/refresh latest community dotfiles if requested and network is reachable
+    if [[ "${AUTO_INSTALL_DOTFILES:-true}" == "true" && -n "${DOTFILES_REPO_URL:-}" ]]; then
+        log_info "Checking for remote community dotfiles (${DOTFILES_REPO_URL})..."
+        DOTFILES_CLONE_DIR="/tmp/community-dotfiles-repo"
+        rm -rf "${DOTFILES_CLONE_DIR}"
+        if git clone --depth=1 "${DOTFILES_REPO_URL}" "${DOTFILES_CLONE_DIR}" 2>/dev/null; then
+            log_success "Successfully fetched remote community dotfiles from GitHub."
+            if [[ -d "${DOTFILES_CLONE_DIR}/dotfiles" ]]; then
+                cp -rf "${DOTFILES_CLONE_DIR}/dotfiles/." "${DOTFILES_SRC}/" 2>/dev/null || true
+            fi
+            rm -rf "${DOTFILES_CLONE_DIR}"
+        else
+            log_info "Remote repository unavailable; utilizing local pre-bundled community dotfiles."
+        fi
+    fi
 
-# 8. Adaptive Hardware Customization for Polybar
-# Dynamically adapt primary network interface
-PRIMARY_NET_IFACE="$(ip -o link show 2>/dev/null | awk -F': ' '$2 !~ "lo|vir|docker" {print $2; exit}' || echo "")"
-if [[ -n "$PRIMARY_NET_IFACE" ]]; then
-    for _pcfg in "${USER_CONFIG}/bspwm/polybar/config" "${USER_CONFIG}/polybar/config.ini"; do
-        if [[ -f "$_pcfg" ]]; then
-            sed -i "s/interface = wlan0/interface = ${PRIMARY_NET_IFACE}/" "$_pcfg"
+    mkdir -p "${USER_CONFIG}"/{bspwm,sxhkd,polybar,rofi,dunst,picom}
+    mkdir -p "${USER_HOME}"/.Xresources.d
+
+    # Window Manager & Ricing Suites (BSPWM, SXHKD, Polybar, Dunst, Rofi)
+    if [[ -d "${DOTFILES_SRC}/bspwm" ]]; then
+        cp -rf "${DOTFILES_SRC}/bspwm/." "${USER_CONFIG}/bspwm/"
+    fi
+    if [[ -d "${DOTFILES_SRC}/sxhkd" ]]; then
+        cp -rf "${DOTFILES_SRC}/sxhkd/." "${USER_CONFIG}/sxhkd/"
+    fi
+    if [[ -d "${DOTFILES_SRC}/polybar" ]]; then
+        cp -rf "${DOTFILES_SRC}/polybar/." "${USER_CONFIG}/polybar/"
+    fi
+    if [[ -d "${DOTFILES_SRC}/rofi" ]]; then
+        cp -rf "${DOTFILES_SRC}/rofi/." "${USER_CONFIG}/rofi/"
+    fi
+    if [[ -d "${DOTFILES_SRC}/dunst" ]]; then
+        cp -rf "${DOTFILES_SRC}/dunst/." "${USER_CONFIG}/dunst/"
+    fi
+
+    if [[ -f "${USER_CONFIG}/bspwm/alacritty/alacritty.toml" ]]; then
+        cp "${USER_CONFIG}/bspwm/alacritty/alacritty.toml" "${USER_CONFIG}/alacritty/alacritty.toml"
+    fi
+
+    # Picom Compositor Configuration
+    if [[ -f "${DOTFILES_SRC}/picom/picom.conf" ]]; then
+        cp "${DOTFILES_SRC}/picom/picom.conf" "${USER_CONFIG}/picom/picom.conf"
+    fi
+    if [[ -f "${USER_CONFIG}/bspwm/compton.conf" && ! -f "${USER_CONFIG}/picom/picom.conf" ]]; then
+        cp "${USER_CONFIG}/bspwm/compton.conf" "${USER_CONFIG}/picom/picom.conf"
+    fi
+
+    # Xresources & Session Files
+    if [[ -d "${DOTFILES_SRC}/Xresources/.Xresources.d" ]]; then
+        cp -rf "${DOTFILES_SRC}/Xresources/.Xresources.d/." "${USER_HOME}/.Xresources.d/"
+    fi
+    if [[ -f "${DOTFILES_SRC}/Xresources/.Xresources" ]]; then
+        cp "${DOTFILES_SRC}/Xresources/.Xresources" "${USER_HOME}/.Xresources"
+    elif [[ -f "${DOTFILES_SRC}/.Xresources" ]]; then
+        cp "${DOTFILES_SRC}/.Xresources" "${USER_HOME}/.Xresources"
+    fi
+
+    if [[ ! -f "${USER_HOME}/.Xresources.d/colors" && -f "${USER_CONFIG}/bspwm/themes/nord" ]]; then
+        cp "${USER_CONFIG}/bspwm/themes/nord" "${USER_HOME}/.Xresources.d/colors"
+    fi
+
+    [[ -f "${DOTFILES_SRC}/.xsettingsd" ]] && cp "${DOTFILES_SRC}/.xsettingsd" "${USER_HOME}/.xsettingsd"
+    [[ -f "${DOTFILES_SRC}/.fehbg" ]] && cp "${DOTFILES_SRC}/.fehbg" "${USER_HOME}/.fehbg"
+    [[ -f "${DOTFILES_SRC}/xinitrc" ]] && cp "${DOTFILES_SRC}/xinitrc" "${USER_HOME}/.xinitrc"
+
+    # Execution permissions
+    chmod +x "${USER_CONFIG}/bspwm/bspwmrc" 2>/dev/null || true
+    chmod +x "${USER_CONFIG}/bspwm/bin/"* 2>/dev/null || true
+    chmod +x "${USER_CONFIG}/bspwm/rofi/bin/"* 2>/dev/null || true
+    chmod +x "${USER_CONFIG}/bspwm/themes/set-theme" 2>/dev/null || true
+    chmod +x "${USER_CONFIG}/polybar/launch.sh" 2>/dev/null || true
+    chmod +x "${USER_CONFIG}/dunst/"*.sh 2>/dev/null || true
+    chmod +x "${USER_HOME}/.fehbg" 2>/dev/null || true
+    chmod +x "${USER_HOME}/.xinitrc" 2>/dev/null || true
+
+    # Pre-synchronize Colors
+    if [[ -x "${USER_CONFIG}/bspwm/bin/bspcolors" ]]; then
+        su - "${USERNAME}" -c "bash ${USER_CONFIG}/bspwm/bin/bspcolors" 2>/dev/null || true
+    fi
+
+    # Adaptive Hardware Customization for Polybar
+    PRIMARY_NET_IFACE="$(ip -o link show 2>/dev/null | awk -F': ' '$2 !~ "lo|vir|docker" {print $2; exit}' || echo "")"
+    if [[ -n "$PRIMARY_NET_IFACE" ]]; then
+        for _pcfg in "${USER_CONFIG}/bspwm/polybar/config" "${USER_CONFIG}/polybar/config.ini"; do
+            if [[ -f "$_pcfg" ]]; then
+                sed -i "s/interface = wlan0/interface = ${PRIMARY_NET_IFACE}/" "$_pcfg"
+            fi
+        done
+        log_info "Configured Polybar network interface to '${PRIMARY_NET_IFACE}'."
+    fi
+
+    for _pcfg in "${USER_CONFIG}/polybar/config.ini" "${USER_CONFIG}/bspwm/polybar/config"; do
+        [[ ! -f "$_pcfg" ]] && continue
+        if [[ "${HAS_BATTERY:-0}" -eq 1 ]]; then
+            if [[ -n "${BATTERY_NAME:-}" ]]; then
+                sed -i "s/^battery = BAT[0-9]/battery = ${BATTERY_NAME}/" "$_pcfg"
+            fi
+            if [[ -n "${ADAPTER_NAME:-}" ]]; then
+                sed -i "s/^adapter = .*/adapter = ${ADAPTER_NAME}/" "$_pcfg"
+            fi
+            log_info "Polybar battery module configured for ${BATTERY_NAME:-BAT0} and ${ADAPTER_NAME:-AC}."
+        else
+            sed -i 's/modules-right = cpu memory filesystem backlight battery network volume date/modules-right = cpu memory filesystem network volume date/' "$_pcfg"
+            sed -i 's/modules-right = cpu memory battery pulseaudio date/modules-right = cpu memory pulseaudio date/' "$_pcfg"
+            log_info "Battery not present; disabled battery module in Polybar."
         fi
     done
-    log_info "Configured Polybar network interface to '${PRIMARY_NET_IFACE}'."
 fi
 
-# Tailor Polybar battery module based on detected battery presence
-for _pcfg in "${USER_CONFIG}/polybar/config.ini" "${USER_CONFIG}/bspwm/polybar/config"; do
-    [[ ! -f "$_pcfg" ]] && continue
-    if [[ "${HAS_BATTERY:-0}" -eq 1 ]]; then
-        if [[ -n "${BATTERY_NAME:-}" ]]; then
-            sed -i "s/^battery = BAT[0-9]/battery = ${BATTERY_NAME}/" "$_pcfg"
-        fi
-        if [[ -n "${ADAPTER_NAME:-}" ]]; then
-            sed -i "s/^adapter = .*/adapter = ${ADAPTER_NAME}/" "$_pcfg"
-        fi
-        log_info "Polybar battery module configured for ${BATTERY_NAME:-BAT0} and ${ADAPTER_NAME:-AC}."
-    else
-        sed -i 's/modules-right = cpu memory filesystem backlight battery network volume date/modules-right = cpu memory filesystem network volume date/' "$_pcfg"
-        sed -i 's/modules-right = cpu memory battery pulseaudio date/modules-right = cpu memory pulseaudio date/' "$_pcfg"
-        log_info "Battery not present; disabled battery module in Polybar."
-    fi
-done
-
-# 9. Finalize Ownership
+# Finalize Ownership
 chown -R "${USERNAME}:users" "${USER_HOME}"
-log_success "Community dotfiles deployed to ${USER_HOME}/.config/ and permissions set."
+log_success "User dotfiles and permissions deployed to ${USER_HOME}."
 
 # ------------------------------------------------------------------------------
 # 12. System Services Enablement
@@ -763,7 +827,10 @@ log_step "Enabling System Daemons"
 
 systemctl enable NetworkManager.service
 
-if [[ "${DISPLAY_MANAGER}" == "lightdm" ]]; then
+if [[ "${DISPLAY_MANAGER}" == "gdm" ]]; then
+    systemctl enable gdm.service
+    log_info "Display manager (gdm) enabled for GNOME."
+elif [[ "${DISPLAY_MANAGER}" == "lightdm" ]]; then
     systemctl enable lightdm.service
     log_info "Display manager (lightdm) enabled."
 elif [[ "${DISPLAY_MANAGER}" == "sddm" ]]; then

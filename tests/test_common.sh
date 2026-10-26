@@ -38,10 +38,13 @@ test_assert_eq "MMC disk partition 1" "/dev/mmcblk0p1" "$(get_partition_name /de
 test_assert_eq "VirtIO disk partition 1" "/dev/vda1" "$(get_partition_name /dev/vda 1)"
 
 # 2. Test config.env variables
+test_assert_eq "Default DISK_LAYOUT" "single" "${DISK_LAYOUT}"
 test_assert_eq "Default DISK1" "/dev/sda" "${DISK1}"
 test_assert_eq "Default DISK2" "/dev/sdb" "${DISK2}"
+test_assert_eq "Default FILESYSTEM" "btrfs" "${FILESYSTEM}"
 test_assert_eq "Default BTRFS_MODE" "raid0" "${BTRFS_MODE}"
 test_assert_eq "BTRFS_MOUNT_OPTS contains zstd" "true" "$([[ "${BTRFS_MOUNT_OPTS}" =~ compress=zstd:3 ]] && echo true || echo false)"
+test_assert_eq "Default DESKTOP_ENV" "bspwm" "${DESKTOP_ENV}"
 test_assert_eq "Default WM" "bspwm" "${WM}"
 test_assert_eq "Default TERMINAL" "kitty" "${TERMINAL}"
 test_assert_eq "Default DISPLAY_MANAGER" "lightdm" "${DISPLAY_MANAGER}"
@@ -68,7 +71,37 @@ test_assert_eq "GPU setup is detected non-empty" "true" "$([[ -n "${DETECTED_GPU
 test_assert_eq "CPU Microcode package is set" "true" "$([[ -n "${CPU_UCODE_PACKAGE}" ]] && echo true || echo false)"
 test_assert_eq "GRAPHICS_PACKAGES is populated" "true" "$([[ ${#GRAPHICS_PACKAGES[@]} -gt 0 ]] && echo true || echo false)"
 
-# 4b. Test mock GPU offload (PRIME) scenarios
+# 4b. Test Desktop Environment and Display Manager Dynamic Resolution
+DESKTOP_ENV="gnome"
+DISPLAY_MANAGER=""
+apply_hardware_profile
+test_assert_eq "GNOME desktop resolves to GDM display manager" "gdm" "${DISPLAY_MANAGER}"
+
+DESKTOP_ENV="bspwm"
+DISPLAY_MANAGER=""
+apply_hardware_profile
+test_assert_eq "BSPWM desktop resolves to LightDM display manager" "lightdm" "${DISPLAY_MANAGER}"
+
+# 4c. Test Filesystem choices
+FILESYSTEM="ext4"
+apply_hardware_profile
+test_assert_eq "ext4 filesystem retains ext4 selection" "ext4" "${FILESYSTEM}"
+
+FILESYSTEM="xfs"
+apply_hardware_profile
+test_assert_eq "xfs filesystem retains xfs selection" "xfs" "${FILESYSTEM}"
+
+FILESYSTEM="f2fs"
+apply_hardware_profile
+test_assert_eq "f2fs filesystem retains f2fs selection" "f2fs" "${FILESYSTEM}"
+
+# 4d. Test Single-Disk vs All-Disks Layout Logic
+DISK_LAYOUT="single"
+apply_hardware_profile
+test_assert_eq "Single disk layout clears DISK2" "" "${DISK2}"
+test_assert_eq "Single disk layout sets single_disk btrfs mode" "single_disk" "${BTRFS_MODE}"
+
+# 4e. Test mock GPU offload (PRIME) scenarios
 MOCK_INTEL_AMD="00:02.0 VGA compatible controller [0300]: Intel Corporation UHD Graphics 620 [8086:5917]
 01:00.0 Display controller [0380]: Advanced Micro Devices, Inc. Radeon R5 M330 [1002:6900]"
 detect_gpus "${MOCK_INTEL_AMD}"
@@ -90,6 +123,10 @@ MOCK_HW_FILE="/tmp/test_archsetup_hw.env"
 save_hardware_profile "$MOCK_HW_FILE"
 test_assert_eq "Hardware profile saved successfully" "true" "$([[ -f "$MOCK_HW_FILE" ]] && echo true || echo false)"
 test_assert_eq "Hardware profile contains GRAPHICS_PACKAGES" "true" "$(grep -q "^GRAPHICS_PACKAGES=" "$MOCK_HW_FILE" && echo true || echo false)"
+test_assert_eq "Hardware profile contains DISK_LAYOUT" "true" "$(grep -q "^DISK_LAYOUT=" "$MOCK_HW_FILE" && echo true || echo false)"
+test_assert_eq "Hardware profile contains FILESYSTEM" "true" "$(grep -q "^FILESYSTEM=" "$MOCK_HW_FILE" && echo true || echo false)"
+test_assert_eq "Hardware profile contains DESKTOP_ENV" "true" "$(grep -q "^DESKTOP_ENV=" "$MOCK_HW_FILE" && echo true || echo false)"
+test_assert_eq "Hardware profile contains DISPLAY_MANAGER" "true" "$(grep -q "^DISPLAY_MANAGER=" "$MOCK_HW_FILE" && echo true || echo false)"
 rm -f "$MOCK_HW_FILE"
 
 # 6. Test logging functions don't fail under pipefail

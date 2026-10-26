@@ -549,12 +549,26 @@ print_hardware_report() {
     for d in "${DETECTED_DISK_DETAILS[@]}"; do
         echo -e "    * ${d}"
     done
-    echo -e "  Primary Target Disk:    ${CLR_BOLD}${DETECTED_PRIMARY_DISK:-None}${CLR_RESET}"
-    if [[ -n "$DETECTED_SECONDARY_DISK" ]]; then
-        echo -e "  Secondary Disk:         ${CLR_BOLD}${DETECTED_SECONDARY_DISK}${CLR_RESET}"
+    echo -e "  Storage Target Mode:    ${CLR_BOLD}${DISK_LAYOUT:-single}${CLR_RESET} ($([[ "${DISK_LAYOUT:-single}" == "all" ]] && echo "Partition all detected drives" || echo "Single target drive"))"
+    echo -e "  Primary Target Disk:    ${CLR_BOLD}${DISK1:-${DETECTED_PRIMARY_DISK:-None}}${CLR_RESET}"
+    if [[ "${DISK_LAYOUT:-single}" == "all" && -n "${DISK2:-${DETECTED_SECONDARY_DISK:-}}" ]]; then
+        echo -e "  Secondary Disk:         ${CLR_BOLD}${DISK2:-${DETECTED_SECONDARY_DISK}}${CLR_RESET}"
     fi
-    echo -e "  Btrfs Pool Strategy:    ${CLR_BOLD}${DETECTED_RECOMMENDED_BTRFS_MODE}${CLR_RESET}"
-    echo -e "  Mount Options:          ${DETECTED_BTRFS_MOUNT_OPTS}"
+    echo -e "  Filesystem / Scheme:    ${CLR_BOLD}${FILESYSTEM:-btrfs}${CLR_RESET}"
+    if [[ "${FILESYSTEM:-btrfs}" == "btrfs" ]]; then
+        echo -e "  Btrfs Pool Strategy:    ${CLR_BOLD}${BTRFS_MODE:-${DETECTED_RECOMMENDED_BTRFS_MODE}}${CLR_RESET}"
+        echo -e "  Mount Options:          ${BTRFS_MOUNT_OPTS:-${DETECTED_BTRFS_MOUNT_OPTS}}"
+    elif [[ "${FILESYSTEM:-btrfs}" == "ext4" ]]; then
+        echo -e "  Mount Options:          ${EXT4_MOUNT_OPTS:-noatime,errors=remount-ro}"
+    elif [[ "${FILESYSTEM:-btrfs}" == "xfs" ]]; then
+        echo -e "  Mount Options:          ${XFS_MOUNT_OPTS:-noatime}"
+    elif [[ "${FILESYSTEM:-btrfs}" == "f2fs" ]]; then
+        echo -e "  Mount Options:          ${F2FS_MOUNT_OPTS:-noatime}"
+    fi
+
+    # Desktop Environment & Display Manager
+    echo -e "  Desktop Environment:    ${CLR_BOLD}${DESKTOP_ENV:-bspwm}${CLR_RESET}"
+    echo -e "  Display Manager:        ${CLR_BOLD}${DISPLAY_MANAGER:-lightdm}${CLR_RESET}"
 
     # Graphics
     echo -e "  Graphics Architecture:  ${CLR_BOLD}${DETECTED_GPU_SETUP}${CLR_RESET}"
@@ -596,35 +610,60 @@ apply_hardware_profile() {
     fi
     ZRAM_ALGORITHM="${ZRAM_ALGORITHM:-${DETECTED_ZRAM_ALGORITHM}}"
 
-    # 3. Storage
+    # 3. Storage Layout & Filesystem Strategy
+    DISK_LAYOUT="${DISK_LAYOUT:-single}"
+    FILESYSTEM="${FILESYSTEM:-${FS_TYPE:-btrfs}}"
+    FS_TYPE="${FILESYSTEM}"
+
     # If DISK1 is not set or points to a non-existent device, use detected primary disk
     if [[ -z "${DISK1:-}" || ( "${DRY_RUN:-0}" != "1" && ! -b "${DISK1:-}" && -n "${DETECTED_PRIMARY_DISK:-}" ) ]]; then
         DISK1="${DETECTED_PRIMARY_DISK:-${DISK1:-/dev/sda}}"
     fi
 
-    # If only 1 disk is detected or secondary disk matches primary
-    if [[ "$DETECTED_DISK_COUNT" -le 1 ]]; then
+    if [[ "${DISK_LAYOUT}" == "single" ]]; then
         DISK2=""
         BTRFS_MODE="single_disk"
     else
-        # Multi-disk mode
-        DISK2="${DISK2:-${DETECTED_SECONDARY_DISK}}"
-        if [[ -z "${DISK2}" || "${DISK2}" == "${DISK1}" ]]; then
-            DISK2=""
-            BTRFS_MODE="single_disk"
+        # Multi-disk mode (DISK_LAYOUT="all")
+        if [[ "$DETECTED_DISK_COUNT" -ge 2 ]]; then
+            DISK2="${DISK2:-${DETECTED_SECONDARY_DISK}}"
+            if [[ -z "${DISK2}" || "${DISK2}" == "${DISK1}" ]]; then
+                DISK2=""
+                DISK_LAYOUT="single"
+                BTRFS_MODE="single_disk"
+            else
+                BTRFS_MODE="${BTRFS_MODE:-${DETECTED_RECOMMENDED_BTRFS_MODE}}"
+            fi
         else
-            BTRFS_MODE="${BTRFS_MODE:-${DETECTED_RECOMMENDED_BTRFS_MODE}}"
+            DISK2=""
+            DISK_LAYOUT="single"
+            BTRFS_MODE="single_disk"
         fi
     fi
 
     # Tune mount options: if rotational disk, use mount options without discard=async
     if [[ "${DETECTED_PRIMARY_DISK_ROTA}" == "1" ]]; then
-        BTRFS_MOUNT_OPTS="${DETECTED_BTRFS_MOUNT_OPTS}"
+        BTRFS_MOUNT_OPTS="noatime,compress=zstd:3,space_cache=v2"
     else
-        BTRFS_MOUNT_OPTS="${BTRFS_MOUNT_OPTS:-${DETECTED_BTRFS_MOUNT_OPTS}}"
+        BTRFS_MOUNT_OPTS="${BTRFS_MOUNT_OPTS:-noatime,compress=zstd:3,space_cache=v2,discard=async}"
+    fi
+    EXT4_MOUNT_OPTS="${EXT4_MOUNT_OPTS:-noatime,errors=remount-ro}"
+    XFS_MOUNT_OPTS="${XFS_MOUNT_OPTS:-noatime}"
+    F2FS_MOUNT_OPTS="${F2FS_MOUNT_OPTS:-noatime}"
+    SECONDARY_MOUNT="${SECONDARY_MOUNT:-/data}"
+
+    # 4. Desktop Environment & Display Manager
+    DESKTOP_ENV="${DESKTOP_ENV:-${WM:-bspwm}}"
+    WM="${DESKTOP_ENV}"
+    if [[ -z "${DISPLAY_MANAGER:-}" ]]; then
+        if [[ "${DESKTOP_ENV}" == "gnome" ]]; then
+            DISPLAY_MANAGER="gdm"
+        else
+            DISPLAY_MANAGER="lightdm"
+        fi
     fi
 
-    # 4. Graphics & KMS
+    # 5. Graphics & KMS
     KMS_MODULES="${DETECTED_KMS_MODULES}"
     KERNEL_CMDLINE_EXTRA="${DETECTED_KERNEL_CMDLINE_EXTRA}"
     PRIME_TYPE="${DETECTED_PRIME_TYPE}"
@@ -640,7 +679,7 @@ apply_hardware_profile() {
         GRAPHICS_PACKAGES=("${filtered_gfx[@]}")
     fi
 
-    # 5. Chassis, Battery & Virtualization
+    # 6. Chassis, Battery & Virtualization
     IS_VM="${DETECTED_IS_VM}"
     VIRT_TYPE="${DETECTED_VIRT}"
     CHASSIS_TYPE="${DETECTED_CHASSIS}"
@@ -690,10 +729,21 @@ KERNEL_CMDLINE_EXTRA="${KERNEL_CMDLINE_EXTRA}"
 GRAPHICS_PACKAGES=(${GRAPHICS_PACKAGES[*]:-${DETECTED_GRAPHICS_PACKAGES[*]}})
 DETECTED_GRAPHICS_PACKAGES=(${DETECTED_GRAPHICS_PACKAGES[*]})
 
+DISK_LAYOUT="${DISK_LAYOUT}"
 DISK1="${DISK1}"
 DISK2="${DISK2}"
+FILESYSTEM="${FILESYSTEM}"
+FS_TYPE="${FS_TYPE}"
 BTRFS_MODE="${BTRFS_MODE}"
 BTRFS_MOUNT_OPTS="${BTRFS_MOUNT_OPTS}"
+EXT4_MOUNT_OPTS="${EXT4_MOUNT_OPTS}"
+XFS_MOUNT_OPTS="${XFS_MOUNT_OPTS}"
+F2FS_MOUNT_OPTS="${F2FS_MOUNT_OPTS}"
+SECONDARY_MOUNT="${SECONDARY_MOUNT}"
+
+DESKTOP_ENV="${DESKTOP_ENV}"
+WM="${WM}"
+DISPLAY_MANAGER="${DISPLAY_MANAGER}"
 
 ENABLE_MULTILIB="${ENABLE_MULTILIB:-true}"
 ENABLE_CHAOTIC_AUR="${ENABLE_CHAOTIC_AUR:-true}"

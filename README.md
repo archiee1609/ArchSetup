@@ -1,9 +1,19 @@
 # Adaptive & Modular Arch Linux Deployment Suite
-### Hardware-Aware Automated Installer & Tuned Tiling Environment
+### Hardware-Aware Automated Installer & Configurable Desktop Framework
 
 This repository provides an automated, modular, and robust installation suite for Arch Linux. Equipped with an **intelligent hardware specification recognition engine**, the installer automatically probes system specifications (CPU architecture, RAM, storage topology, GPU architecture, chassis type, and virtualization) before installation begins, dynamically adapting drivers, microcode, kernel parameters, initramfs hooks, filesystem layout, and power profiles to match the host machine.
 
-Originally tailored for an Intel Core i5-8250U + AMD Radeon R5 M330 dual-SSD laptop, the suite has been expanded into a **universal, hardware-aware deployment framework** that works seamlessly across bare-metal laptops, desktops, and virtual machines.
+### Key Restructured Options & Capabilities:
+1. **Flexible Storage Target Mode**: Choose whether to install onto a **single target disk** (safely preserving all other drives) or partition and pool **all available disks** (with Btrfs multi-device striping `raid0`, spanning `single`, or dedicated `/data` storage).
+2. **Multiple Partition Schemes & Filesystems**:
+   - **`btrfs`**: Advanced subvolumes (`@`, `@home`, `@snapshots`, `@var_log`, `@pkg`) with zstd transparent compression, copy-on-write, and automated snapshot booting via `grub-btrfs`.
+   - **`ext4`**: Classic standard Linux filesystem — rock-solid, mature, journaling, and universally supported.
+   - **`xfs`**: Enterprise high-performance 64-bit journaling filesystem.
+   - **`f2fs`**: Flash-Friendly File System engineered specifically for NAND flash storage (NVMe & SATA SSDs).
+3. **Desktop Environment & Display Manager Pairing**:
+   - **`bspwm`**: Minimalist binary space partitioning window manager paired with the **LightDM** display manager (`lightdm-gtk-greeter`), Polybar, Rofi, SXHKD, Picom, and 20+ dynamic themes.
+   - **`gnome`**: Full modern GNOME Desktop Environment paired natively with the **GDM** (GNOME Display Manager), Wayland & Xorg sessions, and GNOME Tweaks.
+4. **Interactive Configuration Wizard & Unattended CLI**: An interactive selector prompts for storage layout, filesystem scheme, and desktop environment, with full support for unattended / scripted deployments via CLI flags and `config.env`.
 
 ---
 
@@ -16,10 +26,10 @@ Before performing any destructive disk operations, the installer executes a comp
 | **Platform & Chassis** | `systemd-detect-virt`, DMI `/sys/class/dmi/id/sys_vendor`, `/sys/class/power_supply/BAT*` | **Bare-Metal Laptop**: Enables `tlp`, `powertop`, `brightnessctl`, and `thermald` (Intel-only). Connects battery monitor.<br>**Bare-Metal Desktop**: Configures standard AC performance profile, disables battery throttling.<br>**Virtual Machine**: Disables laptop power/thermal daemons; automatically activates hypervisor guest services. |
 | **CPU Architecture** | `/proc/cpuinfo` vendor ID & `lscpu` model string | **Intel**: Installs `intel-ucode`, configures `intel_pstate` governor (`powersave`).<br>**AMD**: Installs `amd-ucode`, configures `amd_pstate` governor. |
 | **RAM & ZRAM** | `/proc/meminfo` capacity reading | **$\le$ 4 GB RAM**: Allocates 100% ZRAM with `zstd` compression to prevent out-of-memory lockups.<br>**> 4 GB RAM**: Allocates 50% RAM with `zstd` compression (`zram-generator`). |
-| **Storage & Disks** | `lsblk` enumeration (excludes live USB installer media, loops, and RAM disks) | **Single-Disk**: 1 GB EFI partition (`vfat` -> `/boot`) + Btrfs root subvolumes (`@`, `@home`, etc.).<br>**Multi-Disk (2+ Drives)**: Automated striped pool (`raid0`), linear span (`single`), or separate `/data` drive.<br>**Media Adaptation**: Enables `discard=async` for SSDs/NVMe; automatically omits discard on rotational HDDs. |
+| **Storage & Disks** | `lsblk` enumeration (excludes live USB installer media, loops, and RAM disks) | **Single-Disk Mode**: Formats only the selected drive (1 GB EFI + Root), keeping other drives untouched.<br>**All-Disks Mode**: Partitions primary drive and pools/mounts secondary drive(s).<br>**Filesystems Supported**: `btrfs`, `ext4`, `xfs`, `f2fs`.<br>**Media Adaptation**: Enables `discard=async` for SSDs/NVMe; automatically omits discard on rotational HDDs. |
 | **GPU & Graphics** | PCI display devices scanned via `lspci` (`0300`, `0302`, `0380`) | **Intel iGPU**: `mesa`, `vulkan-intel`, `intel-media-driver`, Early KMS `i915`.<br>**AMD APU/dGPU**: `vulkan-radeon`, `amdgpu`. Legacy GCN 1.0/2.0 cards automatically receive SI/CIK flags.<br>**NVIDIA**: `nvidia-dkms`, `nvidia-utils`, Early KMS `nvidia`, `nvidia_drm.modeset=1`.<br>**Hybrid GPUs**: Deploys tailored `/usr/local/bin/prime-run` wrapper (AMD `DRI_PRIME=1` or NVIDIA offload).<br>**VMs**: Installs `virtualbox-guest-utils`, `open-vm-tools`, or `qemu-guest-agent`. |
 | **Status Bar (Polybar)** | Verifies `/sys/class/power_supply/` | Adapts battery widget to actual battery name (`BAT0`/`BAT1`) and AC adapter (`AC`/`ADP1`). Cleanly strips battery module on desktops and VMs. |
-| **Display & Desktop Stack** | Configuration & Provisioning Engine | **Display Manager**: `lightdm` + `lightdm-gtk-greeter` (configured to launch `bspwm`).<br>**Default Software Stack**: Firefox browser, VLC media player, Neovim (CLI) & Mousepad (GUI), Google Antigravity CLI (`antigravity-cli`). |
+| **Desktop & Display Stack** | User Choice / Configuration Engine | **BSPWM**: Deploys `bspwm`, `sxhkd`, `polybar`, `picom`, `rofi`, and enables `lightdm.service`.<br>**GNOME**: Deploys `gnome`, `gnome-tweaks`, and enables `gdm.service`. |
 
 ---
 
@@ -68,36 +78,48 @@ ArchSetup/
 
 ---
 
-## 3. Storage & Btrfs Strategy
+## 3. Storage Layouts & Filesystem Strategies
 
-The filesystem architecture adapts automatically depending on the number of storage devices detected:
+The installer provides comprehensive control over disk selection, partitioning layout, and filesystem technologies:
 
-### Supported Storage Modes (`BTRFS_MODE`)
+### 1. Storage Target Modes (`DISK_LAYOUT`)
 
-1. **`single_disk` (Automatic for Single-Drive Systems):**
-   - Automatically selected when 1 usable disk is detected (e.g. `/dev/nvme0n1` or `/dev/sda`).
-   - Partition 1: 1 GiB FAT32 EFI System Partition (`/boot`).
-   - Partition 2: Remainder formatted with Btrfs (`ARCH_ROOT`) housing all subvolumes.
-2. **`raid0` (Multi-Device Performance Striping):**
-   - Automatically recommended when 2 or more SSDs are present.
-   - Data is striped across both SSDs (`-d raid0`), doubling sequential read/write throughput.
-   - Metadata is mirrored (`-m raid1`) for fault tolerance against bad sectors.
-3. **`single` (Linear Spanning):**
-   - Spans 2 or more drives sequentially without striping (`-d single -m single`), ideal for drives of mismatched sizes or HDDs.
-4. **`separate` (Isolated Drives):**
-   - Drive 1 contains the root Btrfs filesystem (`@`, `@home`, etc.).
-   - Drive 2 is formatted independently and mounted at `/data`.
+1. **`single` (Single-Disk Layout - Preserves other drives):**
+   - Installs Arch Linux exclusively onto one selected physical drive (`DISK1`).
+   - Partition 1: 1 GiB FAT32 EFI System Partition (`/boot`, type `ef00`).
+   - Partition 2: Remainder formatted with the chosen filesystem (`ARCH_ROOT`, type `8300`).
+   - **Safety Guarantee**: All other connected storage drives remain completely untouched.
+2. **`all` (All-Disks Layout - Pools / Spans / Partitions all drives):**
+   - Automatically utilizes all available/detected drives (`DISK1`, `DISK2`, etc.).
+   - Primary drive contains the 1 GiB EFI System Partition and the primary root filesystem.
+   - Secondary drive(s) are partitioned as `ARCH-DATA` and either joined into a multi-device Btrfs pool (`raid0` / `single`) or mounted at `/data` (for ext4, XFS, F2FS, or separate Btrfs).
 
-### Btrfs Subvolume Layout
-All subvolumes are mounted using high-performance, resilient options:
-`noatime,compress=zstd:3,space_cache=v2[,discard=async]`
+### 2. Supported Partition Schemes & Filesystems (`FILESYSTEM`)
 
-- `/` -> `@`
-- `/home` -> `@home`
-- `/.snapshots` -> `@snapshots`
-- `/var/log` -> `@var_log`
-- `/var/cache/pacman/pkg` -> `@pkg`
-- `/boot` -> 1 GiB FAT32 EFI System Partition (`ef00`)
+1. **`btrfs` (Advanced Copy-on-Write Filesystem):**
+   - Subvolume Layout:
+     - `/` -> `@`
+     - `/home` -> `@home`
+     - `/.snapshots` -> `@snapshots`
+     - `/var/log` -> `@var_log`
+     - `/var/cache/pacman/pkg` -> `@pkg`
+     - `/boot` -> 1 GiB FAT32 EFI System Partition (`ef00`)
+   - Mount Options: `noatime,compress=zstd:3,space_cache=v2[,discard=async]`
+   - Multi-Device Modes (`BTRFS_MODE`): `raid0` (striping for double speed), `single` (linear span), or `separate` (dedicated `/data`).
+   - Snapshot Integration: Automatic snapshot watching via `grub-btrfs` and snapper.
+2. **`ext4` (Classic Standard Linux Journaling Filesystem):**
+   - Rock-solid, highly mature, and universally compatible.
+   - Root mounted at `/mnt`, EFI mounted at `/mnt/boot`.
+   - Mount Options: `noatime,errors=remount-ro`.
+   - Clean, lightweight setup without subvolume complexity.
+3. **`xfs` (High-Performance 64-bit Journaling Filesystem):**
+   - Exceptional parallel I/O throughput and scalability for high-load workloads.
+   - Root formatted with `mkfs.xfs` and mounted at `/mnt`.
+   - Mount Options: `noatime`.
+4. **`f2fs` (Flash-Friendly File System):**
+   - Engineered by Samsung specifically for NAND flash memory, SSDs, and NVMe drives.
+   - Log-structured approach reduces write amplification and maximizes drive endurance.
+   - Mount Options: `noatime`.
 
 > [!NOTE]
 > `discard=async` is enabled for SSD and NVMe drives to sustain write performance, but is automatically omitted on rotational HDDs where async TRIM is unsupported.

@@ -2,7 +2,8 @@
 """
 Comprehensive Validation & Test Suite for ArchSetup Tool
 Tests configuration syntax, script compilation, dotfiles validity,
-permissions, and simulates deployment into a mock chroot environment.
+permissions, filesystem options, desktop choices, display manager mapping,
+and simulates deployment into a mock chroot environment.
 """
 
 import ast
@@ -238,12 +239,10 @@ def run_tests():
     try:
         with open(picom_path, "r", encoding="utf-8") as f:
             picom_text = f.read()
-        # Check dual-GPU requirements
         report("Picom GLX backend enabled", 'backend = "glx";' in picom_text)
         report("Picom VSync enabled", "vsync = true;" in picom_text)
         report("Picom glx-no-stencil enabled", "glx-no-stencil = true;" in picom_text)
         report("Picom unredir-if-possible is false", "unredir-if-possible = false;" in picom_text)
-        # Check braces balance
         open_braces = picom_text.count("{")
         close_braces = picom_text.count("}")
         report("Picom braces balanced", open_braces == close_braces, f"{{: {open_braces}, }}: {close_braces}")
@@ -273,7 +272,7 @@ def run_tests():
         report("GRUB has amdgpu.si_support=1", "amdgpu.si_support=1" in grub_text)
         report("GRUB has radeon.cik_support=0", "radeon.cik_support=0" in grub_text)
         report("GRUB has amdgpu.cik_support=1", "amdgpu.cik_support=1" in grub_text)
-        report("GRUB preloads btrfs", "btrfs" in grub_text and "GRUB_PRELOAD_MODULES" in grub_text)
+        report("GRUB preloads btrfs module by default", "btrfs" in grub_text and "GRUB_PRELOAD_MODULES" in grub_text)
     except Exception as e:
         report("GRUB config check", False, str(e))
 
@@ -286,7 +285,7 @@ def run_tests():
         with open(mkinitcpio_path, "r", encoding="utf-8") as f:
             mkinit_text = f.read()
         report("Early KMS has i915 amdgpu in correct order", "MODULES=(i915 amdgpu)" in mkinit_text)
-        report("mkinitcpio includes btrfs hook", "btrfs" in mkinit_text and "HOOKS=" in mkinit_text)
+        report("mkinitcpio template includes btrfs hook", "btrfs" in mkinit_text and "HOOKS=" in mkinit_text)
     except Exception as e:
         report("mkinitcpio config check", False, str(e))
 
@@ -404,11 +403,15 @@ def run_tests():
         report("pacman.conf enables [multilib]", "[multilib]" in p_full)
         report("pacman.conf enables [chaotic-aur]", "[chaotic-aur]" in p_full and "chaotic-mirrorlist" in p_full)
 
-        # 4. Verify base & userland package manifests
+        # 4. Verify stage1 & stage2 package manifests and filesystem support
         stage1_path = os.path.join(REPO_DIR, "stage1_disk_base.sh")
         with open(stage1_path, "r", encoding="utf-8") as f:
             stage1_content = f.read()
         report("stage1 installs bash and fish in BASE_PACKAGES", "bash\n" in stage1_content and "fish\n" in stage1_content)
+        report("stage1 supports btrfs-progs for Btrfs", "btrfs-progs" in stage1_content)
+        report("stage1 supports e2fsprogs for ext4", "e2fsprogs" in stage1_content)
+        report("stage1 supports xfsprogs for XFS", "xfsprogs" in stage1_content)
+        report("stage1 supports f2fs-tools for F2FS", "f2fs-tools" in stage1_content)
 
         stage2_path = os.path.join(REPO_DIR, "stage2_chroot.sh")
         with open(stage2_path, "r", encoding="utf-8") as f:
@@ -417,12 +420,14 @@ def run_tests():
         report("Firefox is included in default packages", "firefox" in stage2_content)
         report("VLC is included in default packages", "vlc" in stage2_content)
         report("Text editor (neovim/mousepad) is included", "neovim" in stage2_content and "mousepad" in stage2_content)
-        report("LightDM and GTK greeter replace SDDM", "lightdm" in stage2_content and "lightdm-gtk-greeter" in stage2_content)
-        report("LightDM service is enabled", "systemctl enable lightdm.service" in stage2_content)
+        report("BSPWM and LightDM support is present", "bspwm" in stage2_content and "lightdm" in stage2_content)
+        report("GNOME and GDM support is present", "gnome" in stage2_content and "gdm" in stage2_content)
+        report("LightDM service enablement present", "systemctl enable lightdm.service" in stage2_content)
+        report("GDM service enablement present", "systemctl enable gdm.service" in stage2_content)
         report("antigravity-cli installation step present", "antigravity-cli" in stage2_content)
         report("stage2 installs shells (bash, fish)", "bash" in stage2_content and "fish" in stage2_content)
-        report("stage2 installs Alacritty & XFCE4-terminal", "alacritty" in stage2_content and "xfce4-terminal" in stage2_content)
-        report("stage2 installs Thunar file manager", "thunar" in stage2_content)
+        report("stage2 installs Alacritty terminal", "alacritty" in stage2_content)
+        report("stage2 installs Thunar file manager for BSPWM", "thunar" in stage2_content)
 
     # ------------------------------------------------------------------------------
     # 11. Testing Hardware Auto-Detection & Specification Recognition
@@ -468,18 +473,50 @@ def run_tests():
     )
     report("RAM >= 16GB allocates 50% ZRAM", test_ram_high.stdout.strip() == "0.5", test_ram_high.stdout.strip())
 
-    # 4. Test Single-Disk vs Multi-Disk Btrfs profile adaptation
+    # 4. Test Single-Disk vs All-Disks layout logic
     test_disk_single = subprocess.run(
-        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DETECTED_DISK_COUNT=1 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_PRIMARY_DISK_ROTA=0 && DETECTED_SECONDARY_DISK="" && apply_hardware_profile && echo "$BTRFS_MODE|$DISK1|$DISK2"'],
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DISK_LAYOUT="single" && DETECTED_DISK_COUNT=2 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_SECONDARY_DISK="/dev/sdb" && apply_hardware_profile && echo "$DISK_LAYOUT|$DISK1|$DISK2|$BTRFS_MODE"'],
         capture_output=True, text=True
     )
-    report("1 disk automatically selects single_disk mode", test_disk_single.stdout.strip() == "single_disk|/dev/sda|", test_disk_single.stdout.strip())
+    report("Single-disk mode isolates DISK1 and clears DISK2", test_disk_single.stdout.strip() == "single|/dev/sda||single_disk", test_disk_single.stdout.strip())
 
-    test_disk_multi = subprocess.run(
-        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DETECTED_DISK_COUNT=2 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_PRIMARY_DISK_ROTA=0 && DETECTED_SECONDARY_DISK="/dev/sdb" && DETECTED_RECOMMENDED_BTRFS_MODE="raid0" && apply_hardware_profile && echo "$BTRFS_MODE|$DISK1|$DISK2"'],
+    test_disk_all = subprocess.run(
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DISK_LAYOUT="all" && DETECTED_DISK_COUNT=2 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_SECONDARY_DISK="/dev/sdb" && DETECTED_PRIMARY_DISK_ROTA=0 && DETECTED_RECOMMENDED_BTRFS_MODE="raid0" && apply_hardware_profile && echo "$DISK_LAYOUT|$DISK1|$DISK2|$BTRFS_MODE"'],
         capture_output=True, text=True
     )
-    report("2 SSDs select multi-device RAID0 mode", "raid0|/dev/sda|/dev/sdb" in test_disk_multi.stdout.strip(), test_disk_multi.stdout.strip())
+    report("All-disks mode pools multiple drives in raid0", "all|/dev/sda|/dev/sdb|raid0" in test_disk_all.stdout.strip(), test_disk_all.stdout.strip())
+
+    # 4b. Test Desktop Environment & Display Manager Auto-Resolution
+    test_de_gnome = subprocess.run(
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DESKTOP_ENV="gnome" && DISPLAY_MANAGER="" && apply_hardware_profile && echo "$DESKTOP_ENV|$DISPLAY_MANAGER"'],
+        capture_output=True, text=True
+    )
+    report("GNOME environment automatically pairs with GDM", test_de_gnome.stdout.strip() == "gnome|gdm", test_de_gnome.stdout.strip())
+
+    test_de_bspwm = subprocess.run(
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DESKTOP_ENV="bspwm" && DISPLAY_MANAGER="" && apply_hardware_profile && echo "$DESKTOP_ENV|$DISPLAY_MANAGER"'],
+        capture_output=True, text=True
+    )
+    report("BSPWM environment automatically pairs with LightDM", test_de_bspwm.stdout.strip() == "bspwm|lightdm", test_de_bspwm.stdout.strip())
+
+    # 4c. Test Filesystem choices
+    test_fs_ext4 = subprocess.run(
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && FILESYSTEM="ext4" && apply_hardware_profile && echo "$FILESYSTEM|$EXT4_MOUNT_OPTS"'],
+        capture_output=True, text=True
+    )
+    report("ext4 filesystem configured with proper mount options", "ext4|noatime" in test_fs_ext4.stdout.strip(), test_fs_ext4.stdout.strip())
+
+    test_fs_xfs = subprocess.run(
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && FILESYSTEM="xfs" && apply_hardware_profile && echo "$FILESYSTEM|$XFS_MOUNT_OPTS"'],
+        capture_output=True, text=True
+    )
+    report("xfs filesystem configured with proper mount options", "xfs|noatime" in test_fs_xfs.stdout.strip(), test_fs_xfs.stdout.strip())
+
+    test_fs_f2fs = subprocess.run(
+        [BASH_BIN, "-c", f'source "{detect_sh_path}" && FILESYSTEM="f2fs" && apply_hardware_profile && echo "$FILESYSTEM|$F2FS_MOUNT_OPTS"'],
+        capture_output=True, text=True
+    )
+    report("f2fs filesystem configured with proper mount options", "f2fs|noatime" in test_fs_f2fs.stdout.strip(), test_fs_f2fs.stdout.strip())
 
     # 5. Test GPU Early KMS and PRIME resolution
     test_gpu_hybrid = subprocess.run(
@@ -515,7 +552,6 @@ adapter = ADP1
 """)
 
     try:
-        # Simulate no battery (desktop or VM)
         subprocess.run([BASH_BIN, "-c", f'sed -i "s/modules-right = cpu memory battery pulseaudio date/modules-right = cpu memory pulseaudio date/" "{to_posix(poly_temp_path)}"'], check=True)
         with open(poly_temp_path) as f:
             poly_no_bat = f.read()
@@ -528,17 +564,80 @@ adapter = ADP1
     with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
         hw_save_path = tf.name
     try:
-        subprocess.run([BASH_BIN, "-c", f'source "{detect_sh_path}" && detect_hardware && apply_hardware_profile && save_hardware_profile "{to_posix(hw_save_path)}"'], check=True)
+        subprocess.run([BASH_BIN, "-c", f'source "{detect_sh_path}" && DETECTED_DISK_COUNT=2 && DETECTED_PRIMARY_DISK="/dev/sda" && DETECTED_SECONDARY_DISK="/dev/sdb" && DISK_LAYOUT="all" && FILESYSTEM="ext4" && DESKTOP_ENV="gnome" && DISPLAY_MANAGER="gdm" && apply_hardware_profile && save_hardware_profile "{to_posix(hw_save_path)}"'], check=True)
         with open(hw_save_path) as f:
             hw_content = f.read()
         report("Hardware profile file correctly created", os.path.exists(hw_save_path))
         report("Hardware profile defines DETECTED_CPU_VENDOR", "DETECTED_CPU_VENDOR=" in hw_content)
-        report("Hardware profile defines BTRFS_MODE", "BTRFS_MODE=" in hw_content)
+        report("Hardware profile defines DISK_LAYOUT", "DISK_LAYOUT=\"all\"" in hw_content)
+        report("Hardware profile defines FILESYSTEM", "FILESYSTEM=\"ext4\"" in hw_content)
+        report("Hardware profile defines DESKTOP_ENV", "DESKTOP_ENV=\"gnome\"" in hw_content)
+        report("Hardware profile defines DISPLAY_MANAGER", "DISPLAY_MANAGER=\"gdm\"" in hw_content)
         report("Hardware profile defines KMS_MODULES", "KMS_MODULES=" in hw_content)
         report("Hardware profile defines GRAPHICS_PACKAGES", "GRAPHICS_PACKAGES=" in hw_content)
     finally:
         if os.path.exists(hw_save_path):
             os.remove(hw_save_path)
+
+    # ------------------------------------------------------------------------------
+    # 12. Testing Stage 1 Dry-Run Simulation for All Layouts & Filesystems
+    # ------------------------------------------------------------------------------
+    print(f"\n{BLUE}--- 12. Testing Stage 1 Simulation Matrix ---{RESET}")
+    stage1_sh_path = to_posix(os.path.join(REPO_DIR, "stage1_disk_base.sh"))
+
+    # Test Single Disk + Btrfs
+    s1_single_btrfs = subprocess.run(
+        [BASH_BIN, "-c", f'DRY_RUN=1 DISK_LAYOUT="single" DISK1="/dev/sda" DISK2="" FILESYSTEM="btrfs" "{stage1_sh_path}"'],
+        capture_output=True, text=True
+    )
+    report("Stage 1 simulation: single-disk btrfs", "Storage Target Mode: single" in s1_single_btrfs.stdout and "mkfs.btrfs -f -L \"ARCH_ROOT\"" in s1_single_btrfs.stdout, s1_single_btrfs.stderr.strip())
+
+    # Test All Disks + Btrfs RAID0
+    s1_all_btrfs = subprocess.run(
+        [BASH_BIN, "-c", f'DRY_RUN=1 DISK_LAYOUT="all" DISK1="/dev/sda" DISK2="/dev/sdb" FILESYSTEM="btrfs" BTRFS_MODE="raid0" "{stage1_sh_path}"'],
+        capture_output=True, text=True
+    )
+    report("Stage 1 simulation: all-disks btrfs raid0", "Storage Target Mode: all" in s1_all_btrfs.stdout and "-d raid0 -m raid1" in s1_all_btrfs.stdout, s1_all_btrfs.stderr.strip())
+
+    # Test Single Disk + ext4
+    s1_single_ext4 = subprocess.run(
+        [BASH_BIN, "-c", f'DRY_RUN=1 DISK_LAYOUT="single" DISK1="/dev/sda" DISK2="" FILESYSTEM="ext4" "{stage1_sh_path}"'],
+        capture_output=True, text=True
+    )
+    report("Stage 1 simulation: single-disk ext4", "mkfs.ext4 -F -L \"ARCH_ROOT\"" in s1_single_ext4.stdout, s1_single_ext4.stderr.strip())
+
+    # Test All Disks + ext4
+    s1_all_ext4 = subprocess.run(
+        [BASH_BIN, "-c", f'DRY_RUN=1 DISK_LAYOUT="all" DISK1="/dev/sda" DISK2="/dev/sdb" FILESYSTEM="ext4" "{stage1_sh_path}"'],
+        capture_output=True, text=True
+    )
+    report("Stage 1 simulation: all-disks ext4", "mkfs.ext4 -F -L \"ARCH_DATA\"" in s1_all_ext4.stdout, s1_all_ext4.stderr.strip())
+
+    # Test Single Disk + XFS
+    s1_single_xfs = subprocess.run(
+        [BASH_BIN, "-c", f'DRY_RUN=1 DISK_LAYOUT="single" DISK1="/dev/sda" DISK2="" FILESYSTEM="xfs" "{stage1_sh_path}"'],
+        capture_output=True, text=True
+    )
+    report("Stage 1 simulation: single-disk xfs", "mkfs.xfs -f -L \"ARCH_ROOT\"" in s1_single_xfs.stdout, s1_single_xfs.stderr.strip())
+
+    # Test Single Disk + F2FS
+    s1_single_f2fs = subprocess.run(
+        [BASH_BIN, "-c", f'DRY_RUN=1 DISK_LAYOUT="single" DISK1="/dev/sda" DISK2="" FILESYSTEM="f2fs" "{stage1_sh_path}"'],
+        capture_output=True, text=True
+    )
+    report("Stage 1 simulation: single-disk f2fs", "mkfs.f2fs -f -l \"ARCH_ROOT\"" in s1_single_f2fs.stdout, s1_single_f2fs.stderr.strip())
+
+    # ------------------------------------------------------------------------------
+    # 13. Testing install.sh CLI Flags
+    # ------------------------------------------------------------------------------
+    print(f"\n{BLUE}--- 13. Testing install.sh CLI Interface ---{RESET}")
+    install_sh_path = to_posix(os.path.join(REPO_DIR, "install.sh"))
+
+    inst_help = subprocess.run([BASH_BIN, install_sh_path, "--help"], capture_output=True, text=True)
+    report("install.sh --help exits with code 0", inst_help.returncode == 0)
+    report("install.sh --help documents --disk-layout", "--disk-layout" in inst_help.stdout)
+    report("install.sh --help documents --fs", "--fs" in inst_help.stdout)
+    report("install.sh --help documents --desktop", "--desktop" in inst_help.stdout)
 
     print(f"\n{BLUE}======================================================================{RESET}")
     print(f"Test Results: {GREEN}{passed_count} Passed{RESET}, {RED if failed_count else GREEN}{failed_count} Failed{RESET}")
