@@ -50,10 +50,10 @@ case $chosen in
 		fi 
         ;;
     $bmon)
-        alacritty --class 'alacritty-float,alacritty-float' --config-file ~/.config/bspwm/alacritty/alacritty.yml -e bmon
+        bspterm -f -e bmon
         ;;
     $launch_cli)
-        alacritty --class 'alacritty-float,alacritty-float' --config-file ~/.config/bspwm/alacritty/alacritty.yml -e nmtui
+        bspterm -f -e nmtui
         ;;
     $launch)
         nm-connection-editor

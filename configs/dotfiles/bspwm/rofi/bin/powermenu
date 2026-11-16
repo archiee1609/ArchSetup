@@ -45,9 +45,14 @@ case $chosen in
     $suspend)
 		ans=$($HOME/.config/bspwm/rofi/bin/confirm)
 		if [[ $ans == "yes" ]] || [[ $ans == "YES" ]] || [[ $ans == "y" ]]; then
-        mpc -q pause
-        amixer set Master mute
-        betterlockscreen --suspend
+        mpc -q pause 2>/dev/null || true
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ 1 2>/dev/null || amixer set Master mute 2>/dev/null || true
+        if command -v betterlockscreen >/dev/null 2>&1; then
+            betterlockscreen --suspend
+        else
+            bsplock &
+            systemctl suspend
+        fi
 		elif [[ $ans == "no" ]] || [[ $ans == "NO" ]] || [[ $ans == "n" ]]; then
         exit
         else

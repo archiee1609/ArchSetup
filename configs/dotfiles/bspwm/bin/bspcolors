@@ -131,6 +131,11 @@ bspterm () {
 	    cyan:    '${ALTCYAN}'
 	    white:   '${ALTWHITE}'
 	_EOF_
+
+	# If main ~/.config/alacritty dir exists, synchronize colors
+	if [[ -d "$HOME/.config/alacritty" ]]; then
+		cp "$DIR/alacritty/colors.toml" "$HOME/.config/alacritty/colors.toml" 2>/dev/null || true
+	fi
 }
 
 bsprofi () {

@@ -655,13 +655,14 @@ apply_hardware_profile() {
     # 4. Desktop Environment & Display Manager
     DESKTOP_ENV="${DESKTOP_ENV:-${WM:-bspwm}}"
     WM="${DESKTOP_ENV}"
-    if [[ -z "${DISPLAY_MANAGER:-}" ]]; then
+    if [[ -z "${DISPLAY_MANAGER:-}" || ( "${DESKTOP_ENV}" == "gnome" && "${DISPLAY_MANAGER:-}" == "lightdm" && "${EXPLICIT_DISPLAY_MANAGER:-false}" != "true" ) ]]; then
         if [[ "${DESKTOP_ENV}" == "gnome" ]]; then
             DISPLAY_MANAGER="gdm"
         else
             DISPLAY_MANAGER="lightdm"
         fi
     fi
+    MEDIA_PLAYER="${MEDIA_PLAYER:-vlc}"
 
     # 5. Graphics & KMS
     KMS_MODULES="${DETECTED_KMS_MODULES}"
@@ -744,6 +745,7 @@ SECONDARY_MOUNT="${SECONDARY_MOUNT}"
 DESKTOP_ENV="${DESKTOP_ENV}"
 WM="${WM}"
 DISPLAY_MANAGER="${DISPLAY_MANAGER}"
+MEDIA_PLAYER="${MEDIA_PLAYER:-vlc}"
 
 ENABLE_MULTILIB="${ENABLE_MULTILIB:-true}"
 ENABLE_CHAOTIC_AUR="${ENABLE_CHAOTIC_AUR:-true}"

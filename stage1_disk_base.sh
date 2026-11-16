@@ -17,6 +17,7 @@ _OVERRIDE_FILESYSTEM="${FILESYSTEM:-${FS_TYPE:-}}"
 _OVERRIDE_BTRFS_MODE="${BTRFS_MODE:-}"
 _OVERRIDE_DESKTOP_ENV="${DESKTOP_ENV:-${WM:-}}"
 _OVERRIDE_DISPLAY_MANAGER="${DISPLAY_MANAGER:-}"
+_OVERRIDE_MEDIA_PLAYER="${MEDIA_PLAYER:-}"
 
 # Source common library and user configuration
 if [[ -f "${SCRIPT_DIR}/lib/common.sh" ]]; then
@@ -56,6 +57,7 @@ fi
 [[ -n "$_OVERRIDE_BTRFS_MODE" ]] && BTRFS_MODE="$_OVERRIDE_BTRFS_MODE"
 [[ -n "$_OVERRIDE_DESKTOP_ENV" ]] && DESKTOP_ENV="$_OVERRIDE_DESKTOP_ENV"
 [[ -n "$_OVERRIDE_DISPLAY_MANAGER" ]] && DISPLAY_MANAGER="$_OVERRIDE_DISPLAY_MANAGER"
+[[ -n "$_OVERRIDE_MEDIA_PLAYER" ]] && MEDIA_PLAYER="$_OVERRIDE_MEDIA_PLAYER"
 
 # Resolve core configuration variables
 DISK_LAYOUT="${DISK_LAYOUT:-single}"
@@ -63,6 +65,7 @@ FILESYSTEM="${FILESYSTEM:-${FS_TYPE:-btrfs}}"
 FS_TYPE="${FILESYSTEM}"
 BTRFS_MODE="${BTRFS_MODE:-single_disk}"
 SECONDARY_MOUNT="${SECONDARY_MOUNT:-/data}"
+MEDIA_PLAYER="${MEDIA_PLAYER:-vlc}"
 
 # ------------------------------------------------------------------------------
 # Pre-flight Checks
@@ -446,6 +449,7 @@ BASE_PACKAGES=(
     zram-generator
     pciutils
     usbutils
+    xdg-user-dirs
 )
 
 # Filesystem-specific utilities

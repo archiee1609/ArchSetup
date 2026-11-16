@@ -13,6 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _OVERRIDE_FILESYSTEM="${FILESYSTEM:-${FS_TYPE:-}}"
 _OVERRIDE_DESKTOP_ENV="${DESKTOP_ENV:-${WM:-}}"
 _OVERRIDE_DISPLAY_MANAGER="${DISPLAY_MANAGER:-}"
+_OVERRIDE_MEDIA_PLAYER="${MEDIA_PLAYER:-}"
 
 # Source common library and user configuration
 if [[ -f "${SCRIPT_DIR}/lib/common.sh" ]]; then
@@ -53,12 +54,14 @@ fi
 [[ -n "$_OVERRIDE_FILESYSTEM" ]] && FILESYSTEM="$_OVERRIDE_FILESYSTEM"
 [[ -n "$_OVERRIDE_DESKTOP_ENV" ]] && DESKTOP_ENV="$_OVERRIDE_DESKTOP_ENV"
 [[ -n "$_OVERRIDE_DISPLAY_MANAGER" ]] && DISPLAY_MANAGER="$_OVERRIDE_DISPLAY_MANAGER"
+[[ -n "$_OVERRIDE_MEDIA_PLAYER" ]] && MEDIA_PLAYER="$_OVERRIDE_MEDIA_PLAYER"
 
 # Resolve filesystem and desktop options
 FILESYSTEM="${FILESYSTEM:-${FS_TYPE:-btrfs}}"
 FS_TYPE="${FILESYSTEM}"
 DESKTOP_ENV="${DESKTOP_ENV:-${WM:-bspwm}}"
 WM="${DESKTOP_ENV}"
+MEDIA_PLAYER="${MEDIA_PLAYER:-vlc}"
 if [[ -z "${DISPLAY_MANAGER:-}" ]]; then
     if [[ "${DESKTOP_ENV}" == "gnome" ]]; then
         DISPLAY_MANAGER="gdm"
@@ -428,7 +431,7 @@ COMMON_APPS=(
     bash-completion
     fish
     firefox
-    vlc
+    "${MEDIA_PLAYER:-vlc}"
     "${TEXT_EDITOR:-neovim}"
     mousepad
     alacritty
@@ -438,6 +441,7 @@ COMMON_APPS=(
     noto-fonts-cjk
     noto-fonts-emoji
     papirus-icon-theme
+    xdg-user-dirs
 )
 if [[ "${TERMINAL}" == "kitty" ]]; then
     COMMON_APPS+=(kitty)
@@ -507,6 +511,8 @@ else
         mpd
         mpc
         ttf-iosevka-nerd
+        i3lock
+        bmon
     )
 
     if [[ "${DISPLAY_MANAGER}" == "lightdm" ]]; then
@@ -546,12 +552,22 @@ EOF
 fi
 
 # Configure system-wide default text editor environment
+EDITOR_BIN="${TEXT_EDITOR:-neovim}"
+if [[ "$EDITOR_BIN" == "neovim" ]]; then
+    EDITOR_BIN="nvim"
+fi
 mkdir -p /etc/profile.d
 cat <<EOF > /etc/profile.d/editor.sh
-export EDITOR="${TEXT_EDITOR:-neovim}"
-export VISUAL="${TEXT_EDITOR:-neovim}"
+export EDITOR="${EDITOR_BIN}"
+export VISUAL="${EDITOR_BIN}"
 EOF
 chmod +x /etc/profile.d/editor.sh
+
+# Ensure convenient neovim binary alias/symlink exists
+if [[ -x /usr/bin/nvim && ! -e /usr/local/bin/neovim ]]; then
+    mkdir -p /usr/local/bin
+    ln -sf /usr/bin/nvim /usr/local/bin/neovim
+fi
 
 # ------------------------------------------------------------------------------
 # 10. User Provisioning & Permissions
@@ -603,6 +619,15 @@ fi
 log_info "Configuring sudo privileges for %wheel..."
 echo "%wheel ALL=(ALL:ALL) ALL" > /etc/sudoers.d/10-wheel
 chmod 440 /etc/sudoers.d/10-wheel
+
+# Temporarily grant passwordless sudo for userland build steps during chroot install
+echo "${USERNAME} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-temp-installer
+chmod 440 /etc/sudoers.d/99-temp-installer
+
+# Initialize user XDG standard directories
+if command -v xdg-user-dirs-update >/dev/null 2>&1; then
+    su - "${USERNAME}" -c "xdg-user-dirs-update" 2>/dev/null || true
+fi
 
 # ------------------------------------------------------------------------------
 # 10b. Paru AUR Helper Verification / Userland Build Fallback
@@ -665,6 +690,9 @@ if [[ "${INSTALL_ANTIGRAVITY_CLI:-true}" == "true" ]]; then
     fi
 fi
 
+# Clean up temporary passwordless build privilege
+rm -f /etc/sudoers.d/99-temp-installer
+
 # ------------------------------------------------------------------------------
 # 11. Dotfiles & Desktop Configuration Deployment
 # ------------------------------------------------------------------------------
@@ -676,7 +704,7 @@ DOTFILES_SRC="${CONFIGS_DIR}/dotfiles"
 
 # Ensure user directories exist
 mkdir -p "${USER_HOME}"/{.local/bin,Pictures,Documents,Downloads}
-mkdir -p "${USER_CONFIG}"/{fish,alacritty,kitty}
+mkdir -p "${USER_CONFIG}"/{fish,alacritty,kitty,nvim}
 
 # Deploy Shell Configurations (Bash & Fish)
 log_info "Deploying shell configurations (bash & fish)..."
@@ -701,6 +729,9 @@ fi
 
 # Supporting user environment files
 [[ -f "${DOTFILES_SRC}/.vimrc" ]] && cp "${DOTFILES_SRC}/.vimrc" "${USER_HOME}/.vimrc"
+if [[ -f "${USER_HOME}/.vimrc" ]]; then
+    ln -sf "${USER_HOME}/.vimrc" "${USER_CONFIG}/nvim/init.vim"
+fi
 
 # If BSPWM is selected, deploy full rice suite
 if [[ "${DESKTOP_ENV}" == "bspwm" ]]; then

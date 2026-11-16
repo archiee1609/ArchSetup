@@ -50,6 +50,7 @@ test_assert_eq "Default TERMINAL" "kitty" "${TERMINAL}"
 test_assert_eq "Default DISPLAY_MANAGER" "lightdm" "${DISPLAY_MANAGER}"
 test_assert_eq "Default TEXT_EDITOR" "neovim" "${TEXT_EDITOR}"
 test_assert_eq "Default BROWSER" "firefox" "${BROWSER}"
+test_assert_eq "Default MEDIA_PLAYER" "vlc" "${MEDIA_PLAYER}"
 
 # 3. Test AUTO_DETECT_HARDWARE variable
 test_assert_eq "AUTO_DETECT_HARDWARE is true by default" "true" "${AUTO_DETECT_HARDWARE}"
@@ -127,6 +128,7 @@ test_assert_eq "Hardware profile contains DISK_LAYOUT" "true" "$(grep -q "^DISK_
 test_assert_eq "Hardware profile contains FILESYSTEM" "true" "$(grep -q "^FILESYSTEM=" "$MOCK_HW_FILE" && echo true || echo false)"
 test_assert_eq "Hardware profile contains DESKTOP_ENV" "true" "$(grep -q "^DESKTOP_ENV=" "$MOCK_HW_FILE" && echo true || echo false)"
 test_assert_eq "Hardware profile contains DISPLAY_MANAGER" "true" "$(grep -q "^DISPLAY_MANAGER=" "$MOCK_HW_FILE" && echo true || echo false)"
+test_assert_eq "Hardware profile contains MEDIA_PLAYER" "true" "$(grep -q "^MEDIA_PLAYER=" "$MOCK_HW_FILE" && echo true || echo false)"
 rm -f "$MOCK_HW_FILE"
 
 # 6. Test logging functions don't fail under pipefail

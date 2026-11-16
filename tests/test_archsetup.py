@@ -408,6 +408,7 @@ def run_tests():
         with open(stage1_path, "r", encoding="utf-8") as f:
             stage1_content = f.read()
         report("stage1 installs bash and fish in BASE_PACKAGES", "bash\n" in stage1_content and "fish\n" in stage1_content)
+        report("stage1 installs xdg-user-dirs in BASE_PACKAGES", "xdg-user-dirs" in stage1_content)
         report("stage1 supports btrfs-progs for Btrfs", "btrfs-progs" in stage1_content)
         report("stage1 supports e2fsprogs for ext4", "e2fsprogs" in stage1_content)
         report("stage1 supports xfsprogs for XFS", "xfsprogs" in stage1_content)
@@ -420,7 +421,9 @@ def run_tests():
         report("Firefox is included in default packages", "firefox" in stage2_content)
         report("VLC is included in default packages", "vlc" in stage2_content)
         report("Text editor (neovim/mousepad) is included", "neovim" in stage2_content and "mousepad" in stage2_content)
+        report("Neovim binary alias and profile configured", "nvim" in stage2_content)
         report("BSPWM and LightDM support is present", "bspwm" in stage2_content and "lightdm" in stage2_content)
+        report("Screen locker (i3lock) included for BSPWM", "i3lock" in stage2_content)
         report("GNOME and GDM support is present", "gnome" in stage2_content and "gdm" in stage2_content)
         report("LightDM service enablement present", "systemctl enable lightdm.service" in stage2_content)
         report("GDM service enablement present", "systemctl enable gdm.service" in stage2_content)
@@ -573,6 +576,7 @@ adapter = ADP1
         report("Hardware profile defines FILESYSTEM", "FILESYSTEM=\"ext4\"" in hw_content)
         report("Hardware profile defines DESKTOP_ENV", "DESKTOP_ENV=\"gnome\"" in hw_content)
         report("Hardware profile defines DISPLAY_MANAGER", "DISPLAY_MANAGER=\"gdm\"" in hw_content)
+        report("Hardware profile defines MEDIA_PLAYER", "MEDIA_PLAYER=" in hw_content)
         report("Hardware profile defines KMS_MODULES", "KMS_MODULES=" in hw_content)
         report("Hardware profile defines GRAPHICS_PACKAGES", "GRAPHICS_PACKAGES=" in hw_content)
     finally:
@@ -638,6 +642,7 @@ adapter = ADP1
     report("install.sh --help documents --disk-layout", "--disk-layout" in inst_help.stdout)
     report("install.sh --help documents --fs", "--fs" in inst_help.stdout)
     report("install.sh --help documents --desktop", "--desktop" in inst_help.stdout)
+    report("install.sh --help documents --media-player", "--media-player" in inst_help.stdout)
 
     print(f"\n{BLUE}======================================================================{RESET}")
     print(f"Test Results: {GREEN}{passed_count} Passed{RESET}, {RED if failed_count else GREEN}{failed_count} Failed{RESET}")

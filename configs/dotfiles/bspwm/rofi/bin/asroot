@@ -5,12 +5,12 @@ DIR="$HOME/.config/bspwm"
 rofi_command="rofi -theme $DIR/rofi/themes/asroot.rasi"
 
 # Apps
-terminal=" Alacritty"
-files=" Pcmanfm"
-editor=" Geany"
-clifm=" Ranger"
-lpad=" Leafpad"
-vim=" Vim"
+terminal=" Terminal"
+files=" Thunar"
+editor=" Mousepad"
+clifm=" File Manager (CLI)"
+lpad=" Text Editor"
+vim=" Neovim"
 
 # Variable passed to rofi
 options="$terminal\n$files\n$editor\n$clifm\n$lpad\n$vim"
@@ -20,22 +20,22 @@ options="$terminal\n$files\n$editor\n$clifm\n$lpad\n$vim"
 chosen="$(echo -e "$options" | $rofi_command -p "Run as root(#)" -dmenu -selected-row 0)"
 case $chosen in
     $terminal)
-        apps_as_root 'alacritty --class alacritty-float,alacritty-float --config-file /root/.config/bspwm/alacritty/alacritty.yml'
+        apps_as_root 'bspterm -f'
         ;;
     $files)
-        apps_as_root 'dbus-run-session pcmanfm'
+        apps_as_root 'thunar'
         ;;
     $editor)
-        apps_as_root geany
+        apps_as_root 'mousepad'
         ;;
     $clifm)
-        apps_as_root 'alacritty --class alacritty-float,alacritty-float --config-file /root/.config/bspwm/alacritty/alacritty.yml -e ranger'
+        apps_as_root 'bspterm -f'
         ;;
     $lpad)
-        apps_as_root leafpad
+        apps_as_root 'mousepad'
         ;;
     $vim)
-        apps_as_root 'alacritty --class alacritty-float,alacritty-float --config-file /root/.config/bspwm/alacritty/alacritty.yml -e vim'
+        apps_as_root 'bspterm -f -e nvim'
         ;;
 esac
 

@@ -255,10 +255,12 @@ Key configurable parameters:
 - `ENABLE_MULTILIB` (default: `true`)
 - `ENABLE_CHAOTIC_AUR` (default: `true`)
 - `INSTALL_PARU` (default: `true`)
-- `WM` (default: `bspwm`)
+- `WM` / `DESKTOP_ENV` (default: `bspwm`, options: `bspwm` or `gnome`)
 - `TERMINAL` (`kitty` or `alacritty`)
-- `DISPLAY_MANAGER` (`lightdm` or `none`)
-- `TEXT_EDITOR` (default: `neovim`)
+- `DISPLAY_MANAGER` (`lightdm` for bspwm, `gdm` for gnome)
+- `TEXT_EDITOR` (default: `neovim`, CLI binary `nvim`)
+- `BROWSER` (default: `firefox`)
+- `MEDIA_PLAYER` (default: `vlc`)
 - `INSTALL_ANTIGRAVITY_CLI` (default: `true`)
 - `AUTO_INSTALL_DOTFILES` (default: `true`)
 - `DOTFILES_REPO_URL` (default: `https://github.com/theduckchannel/bspwm-install.git`)
@@ -428,20 +430,23 @@ antigravity-cli --version || agy --version
 
 ### BSPWM (`sxhkd`)
 - `Super + Return`: Launch terminal (`bspterm`: Alacritty / Kitty / XFCE4-terminal)
+- `Super + Shift + Return`: Launch floating terminal (`bspterm -f`)
 - `Super + d` or `Alt + F1`: Application launcher (`rofi` drun mode — guaranteed focus & mouse wheel scroll)
 - `Ctrl + Alt + t`: Theme switcher (`bsptheme` — choose from 20+ palettes: Dracula, Nord, Gruvbox, etc.)
 - `Super + Alt + w`: Random wallpaper switcher (`feh`)
 - `Super + r`: Command runner (`rofi` run mode)
 - `Super + x`: Power menu & logout prompt (`rofi` powermenu)
 - `Super + q`: Close focused window
-- `Super + t`: Set window state to tiled
+- `Super + t`: Launch Thunar graphical file manager
+- `Super + Shift + t`: Set window state to tiled
+- `Super + b`: Launch Firefox web browser
 - `Super + Shift + Space`: Toggle floating window
 - `Super + f`: Toggle fullscreen
 - `Super + h/j/k/l` or `Super + Arrow`: Move focus (West / South / North / East)
 - `Super + Shift + h/j/k/l` or `Super + Shift + Arrow`: Swap windows
-- `Super + 1-6`: Switch to desktop 1-6
-- `Super + Shift + 1-6`: Move window to desktop 1-6
-- `Super + Ctrl + h/j/k/l`: Preselect split direction
+- `Super + 1-8`: Switch to desktop 1-8
+- `Super + Shift + 1-8`: Move window to desktop 1-8
+- `Super + Ctrl + h/v`: Preselect split direction (East / South)
 - `Super + Ctrl + Space`: Cancel preselection
 - `Super + Ctrl + r`: Restart BSPWM and reload SXHKD
 - `Super + Ctrl + q`: Quit BSPWM session
@@ -451,11 +456,11 @@ antigravity-cli --version || agy --version
 ### Default Applications Quick Launch
 | Application | Launch Command | GUI Shortcut | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Firefox** | `firefox &` | `Super + d` -> type `firefox` | Web Browsing |
+| **Firefox** | `firefox &` | `Super + b` or `Super + d` | Web Browsing |
 | **VLC Media Player** | `vlc &` | `Super + d` -> type `vlc` | Media Playback |
 | **Mousepad** | `mousepad &` | `Super + d` -> type `mousepad` | Lightweight GTK GUI Text Editor |
 | **Neovim** | `nvim <file>` | Terminal (`Super + Return`) | Primary Terminal Text Editor |
-| **Thunar** | `thunar &` | `Super + d` -> type `thunar` | Graphical File Manager |
+| **Thunar** | `thunar &` | `Super + t` or `Super + d` | Graphical File Manager |
 | **Theme Switcher** | `bsptheme` | `Ctrl + Alt + t` | Interactive 20+ Rice Palette Switcher |
 | **Antigravity CLI** | `antigravity-cli` or `agy` | Terminal (`Super + Return`) | Agentic AI Orchestration TUI |
 | **Paru** | `paru <pkg>` | Terminal (`Super + Return`) | AUR Package Helper & Pacman Wrapper |

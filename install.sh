@@ -86,6 +86,7 @@ show_summary() {
     echo -e "  Display Manager:            ${CLR_BOLD}${DISPLAY_MANAGER}${CLR_RESET}"
     echo -e "  Terminal Emulator:          ${TERMINAL}"
     echo -e "  Default Web Browser:        ${BROWSER:-firefox}"
+    echo -e "  Default Media Player:       ${MEDIA_PLAYER:-vlc}"
     echo -e "  Default Text Editor:        ${TEXT_EDITOR:-neovim} / mousepad"
     echo -e "================================================================================"
 }
@@ -247,10 +248,22 @@ main() {
             --desktop|--de|--wm)
                 DESKTOP_ENV="$2"
                 WM="$2"
+                if [[ "${EXPLICIT_DISPLAY_MANAGER:-false}" != "true" ]]; then
+                    if [[ "$2" == "gnome" ]]; then
+                        DISPLAY_MANAGER="gdm"
+                    elif [[ "$2" == "bspwm" ]]; then
+                        DISPLAY_MANAGER="lightdm"
+                    fi
+                fi
                 shift 2
                 ;;
             --display-manager|--dm)
                 DISPLAY_MANAGER="$2"
+                EXPLICIT_DISPLAY_MANAGER="true"
+                shift 2
+                ;;
+            --media-player|--player)
+                MEDIA_PLAYER="$2"
                 shift 2
                 ;;
             --help|-h)
@@ -265,6 +278,7 @@ main() {
                 echo "  --fs <btrfs|ext4|xfs|f2fs> : Choose root filesystem / partition scheme"
                 echo "  --desktop <bspwm|gnome>    : Choose desktop environment"
                 echo "  --display-manager <dm>     : Choose display manager (lightdm, gdm)"
+                echo "  --media-player <player>    : Choose default media player (vlc)"
                 echo "  --help, -h                 : Show this help message"
                 exit 0
                 ;;
@@ -371,7 +385,7 @@ main() {
     echo -e "  - Desktop Interface: ${CLR_BOLD}${DESKTOP_ENV:-bspwm}${CLR_RESET}"
     echo -e "  - Display Manager:   ${CLR_BOLD}${DISPLAY_MANAGER}${CLR_RESET}"
     echo -e "  - Web Browser:       ${CLR_BOLD}${BROWSER:-firefox}${CLR_RESET}"
-    echo -e "  - Media Player:      ${CLR_BOLD}${BROWSER:-vlc}${CLR_RESET}"
+    echo -e "  - Media Player:      ${CLR_BOLD}${MEDIA_PLAYER:-vlc}${CLR_RESET}"
     echo -e "  - Text Editors:      ${CLR_BOLD}${TEXT_EDITOR:-neovim}${CLR_RESET} (CLI) & ${CLR_BOLD}Mousepad${CLR_RESET} (GTK GUI)"
     if [[ "${INSTALL_ANTIGRAVITY_CLI:-true}" == "true" ]]; then
         echo -e "  - Developer Tools:   ${CLR_BOLD}antigravity-cli${CLR_RESET} (Run via 'antigravity-cli' or 'agy')"

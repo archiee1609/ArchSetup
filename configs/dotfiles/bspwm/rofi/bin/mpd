@@ -53,16 +53,16 @@ fi
 chosen="$(echo -e "$options" | $rofi_command -p "$current" -dmenu $active $urgent -selected-row 1)"
 case $chosen in
     $previous)
-        mpc -q prev && kunst --size 60x60 --silent
+        mpc -q prev && { command -v kunst >/dev/null 2>&1 && kunst --size 60x60 --silent || true; }
         ;;
     $play_pause)
-        mpc -q toggle && kunst --size 60x60 --silent
+        mpc -q toggle && { command -v kunst >/dev/null 2>&1 && kunst --size 60x60 --silent || true; }
         ;;
     $stop)
         mpc -q stop
         ;;
     $next)
-        mpc -q next && kunst --size 60x60 --silent
+        mpc -q next && { command -v kunst >/dev/null 2>&1 && kunst --size 60x60 --silent || true; }
         ;;
     $tog_repeat)
         mpc -q repeat

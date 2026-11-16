@@ -8,8 +8,10 @@ set -g fish_greeting ""
 fish_add_path -g $HOME/.local/bin $HOME/.config/bspwm/bin /usr/local/bin
 
 # Text editor preferences
-set -gx EDITOR neovim
-set -gx VISUAL neovim
+set -gx EDITOR nvim
+set -gx VISUAL nvim
+alias neovim='nvim'
+alias vim='nvim'
 
 # Syntax highlighting & prompt color palette
 set -g fish_color_normal normal

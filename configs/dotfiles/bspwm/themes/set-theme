@@ -29,7 +29,10 @@ set_style () {
 		sed -i -e "s/gtk-cursor-theme-name=.*/gtk-cursor-theme-name=$5/g" ${CFG}/gtk-3.0/settings.ini
 	fi
 	
-	# reload config
+	# reload xrdb and bspwm config
+	if [[ -f "$HOME/.Xresources" ]]; then
+		xrdb -merge "$HOME/.Xresources" 2>/dev/null || true
+	fi
 	bspc wm -r
 }
 

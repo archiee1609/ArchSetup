@@ -15,8 +15,10 @@ shopt -s checkwinsize
 export PATH="$HOME/.local/bin:$HOME/.config/bspwm/bin:/usr/local/bin:$PATH"
 
 # Editor environment
-export EDITOR="neovim"
-export VISUAL="neovim"
+export EDITOR="nvim"
+export VISUAL="nvim"
+alias neovim='nvim'
+alias vim='nvim'
 
 # Terminal prompt styling with git branch integration
 CLR_USER="\[\033[01;32m\]"
