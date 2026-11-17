@@ -10,10 +10,9 @@ This repository provides an automated, modular, and robust installation suite fo
    - **`ext4`**: Classic standard Linux filesystem — rock-solid, mature, journaling, and universally supported.
    - **`xfs`**: Enterprise high-performance 64-bit journaling filesystem.
    - **`f2fs`**: Flash-Friendly File System engineered specifically for NAND flash storage (NVMe & SATA SSDs).
-3. **Desktop Environment & Display Manager Pairing**:
-   - **`bspwm`**: Minimalist binary space partitioning window manager paired with the **LightDM** display manager (`lightdm-gtk-greeter`), Polybar, Rofi, SXHKD, Picom, and 20+ dynamic themes.
-   - **`gnome`**: Full modern GNOME Desktop Environment paired natively with the **GDM** (GNOME Display Manager), Wayland & Xorg sessions, and GNOME Tweaks.
-4. **Interactive Configuration Wizard & Unattended CLI**: An interactive selector prompts for storage layout, filesystem scheme, and desktop environment, with full support for unattended / scripted deployments via CLI flags and `config.env`.
+3. **Desktop Environment & Display Manager**:
+   - **`gnome`**: Full modern GNOME Desktop Environment paired natively with **GDM** (GNOME Display Manager), Wayland & Xorg sessions, and GNOME Tweaks.
+4. **Interactive Configuration Wizard & Unattended CLI**: An interactive selector prompts for storage layout, filesystem scheme, and credentials, with full support for unattended / scripted deployments via CLI flags and `config.env`.
 
 ---
 
@@ -23,13 +22,12 @@ Before performing any destructive disk operations, the installer executes a comp
 
 | Hardware Domain | Auto-Detection Mechanism | Adaptive Configuration Strategy |
 | :--- | :--- | :--- |
-| **Platform & Chassis** | `systemd-detect-virt`, DMI `/sys/class/dmi/id/sys_vendor`, `/sys/class/power_supply/BAT*` | **Bare-Metal Laptop**: Enables `tlp`, `powertop`, `brightnessctl`, and `thermald` (Intel-only). Connects battery monitor.<br>**Bare-Metal Desktop**: Configures standard AC performance profile, disables battery throttling.<br>**Virtual Machine**: Disables laptop power/thermal daemons; automatically activates hypervisor guest services. |
+| **Platform & Chassis** | `systemd-detect-virt`, DMI `/sys/class/dmi/id/sys_vendor`, `/sys/class/power_supply/BAT*` | **Bare-Metal Laptop**: Enables `tlp`, `powertop`, `brightnessctl`, and `thermald` (Intel-only).<br>**Bare-Metal Desktop**: Configures standard AC performance profile, disables battery throttling.<br>**Virtual Machine**: Disables laptop power/thermal daemons; automatically activates hypervisor guest services. |
 | **CPU Architecture** | `/proc/cpuinfo` vendor ID & `lscpu` model string | **Intel**: Installs `intel-ucode`, configures `intel_pstate` governor (`powersave`).<br>**AMD**: Installs `amd-ucode`, configures `amd_pstate` governor. |
 | **RAM & ZRAM** | `/proc/meminfo` capacity reading | **$\le$ 4 GB RAM**: Allocates 100% ZRAM with `zstd` compression to prevent out-of-memory lockups.<br>**> 4 GB RAM**: Allocates 50% RAM with `zstd` compression (`zram-generator`). |
 | **Storage & Disks** | `lsblk` enumeration (excludes live USB installer media, loops, and RAM disks) | **Single-Disk Mode**: Formats only the selected drive (1 GB EFI + Root), keeping other drives untouched.<br>**All-Disks Mode**: Partitions primary drive and pools/mounts secondary drive(s).<br>**Filesystems Supported**: `btrfs`, `ext4`, `xfs`, `f2fs`.<br>**Media Adaptation**: Enables `discard=async` for SSDs/NVMe; automatically omits discard on rotational HDDs. |
 | **GPU & Graphics** | PCI display devices scanned via `lspci` (`0300`, `0302`, `0380`) | **Intel iGPU**: `mesa`, `vulkan-intel`, `intel-media-driver`, Early KMS `i915`.<br>**AMD APU/dGPU**: `vulkan-radeon`, `amdgpu`. Legacy GCN 1.0/2.0 cards automatically receive SI/CIK flags.<br>**NVIDIA**: `nvidia-dkms`, `nvidia-utils`, Early KMS `nvidia`, `nvidia_drm.modeset=1`.<br>**Hybrid GPUs**: Deploys tailored `/usr/local/bin/prime-run` wrapper (AMD `DRI_PRIME=1` or NVIDIA offload).<br>**VMs**: Installs `virtualbox-guest-utils`, `open-vm-tools`, or `qemu-guest-agent`. |
-| **Status Bar (Polybar)** | Verifies `/sys/class/power_supply/` | Adapts battery widget to actual battery name (`BAT0`/`BAT1`) and AC adapter (`AC`/`ADP1`). Cleanly strips battery module on desktops and VMs. |
-| **Desktop & Display Stack** | User Choice / Configuration Engine | **BSPWM**: Deploys `bspwm`, `sxhkd`, `polybar`, `picom`, `rofi`, and enables `lightdm.service`.<br>**GNOME**: Deploys `gnome`, `gnome-tweaks`, and enables `gdm.service`. |
+| **Desktop & Display Stack** | Auto-Configured | **GNOME**: Deploys `gnome`, `gnome-tweaks`, and enables `gdm.service`. |
 
 ---
 
@@ -55,25 +53,14 @@ ArchSetup/
 │   ├── dotfiles/
 │   │   ├── bash/                   # Bash configuration (.bashrc, .bash_profile with git PS1)
 │   │   ├── fish/                   # Fish configuration (config.fish with themes & aliases)
-│   │   ├── bspwm/
-│   │   │   ├── bspwmrc             # BSPWM window manager master configuration
-│   │   │   ├── bin/                # Rice helper utilities (bspcolors, bsptheme, bspterm, bspcomp)
-│   │   │   ├── themes/             # 20+ color themes (Dracula, Nord, Gruvbox, Catppuccin, etc.)
-│   │   │   ├── wallpapers/         # Theme-matching wallpapers
-│   │   │   ├── alacritty/          # Dual TOML & legacy YAML Alacritty color profiles
-│   │   │   ├── polybar/            # Hardware-adaptive Polybar configs & modules
-│   │   │   └── rofi/               # Rofi launcher themes with smooth continuous scrolling
-│   │   ├── sxhkd/sxhkdrc           # SXHKD keybindings (terminal, launchers, themes, layouts)
-│   │   ├── kitty/kitty.conf        # Kitty terminal configuration
-│   │   ├── dunst/dunstrc           # Dunst desktop notification styling
-│   │   └── xinitrc                 # Fallback xinit script
+│   │   └── .vimrc                  # Enhanced Vim configuration
 │   ├── power/
 │   │   └── tlp.conf                # TLP profile template
 │   └── zram/
 │       └── zram-generator.conf     # zram-generator configuration template
 └── tests/
     ├── test_common.sh              # Unit tests for common library, hardware detection & config
-    └── test_archsetup.py           # Comprehensive test suite (AST, syntax, TOML, Rofi, shell, staging)
+    └── test_archsetup.py           # Comprehensive test suite (AST, syntax, GNOME validation, staging)
 ```
 
 ---
@@ -191,15 +178,12 @@ paru -Syu
 
 ### 4. Default Software Stack
 The installer equips the system with an idiomatic, curated software stack ready on first boot:
-1. **Web Browser (`firefox`)**: Up-to-date Firefox browser with hardware-accelerated rendering.
-2. **Developer Agent Orchestration (`antigravity-cli`)**: TUI orchestration tool for Google Antigravity, installed directly via Chaotic-AUR or built via Paru / AUR fallback. Available via `antigravity-cli` or `agy`.
-3. **Text Editors (`neovim` & `mousepad`)**:
-   - **CLI**: `neovim` configured as the system default (`$EDITOR` and `$VISUAL` in `/etc/profile.d/editor.sh`), along with base `nano` and `vim`.
-   - **GUI**: `mousepad`, a lightweight GTK text editor cleanly integrated with BSPWM.
-4. **Display Manager (`lightdm` + `lightdm-gtk-greeter`)**:
-   - Replaces SDDM with a lightweight, dependable display manager and clean GTK greeter.
-   - Pre-configured with session autodetect pointing directly to `bspwm`.
-5. **Media Player (`vlc`)**: Full-featured media player with comprehensive codec support out of the box.
+1. **Desktop Environment (`gnome` & `gnome-tweaks`)**: Full modern GNOME Desktop Environment paired natively with Wayland & Xorg support.
+2. **Display Manager (`gdm`)**: GNOME Display Manager providing clean graphical login, multi-user support, and seamless session launching.
+3. **Web Browser (`firefox`)**: Up-to-date Firefox browser with hardware-accelerated rendering.
+4. **Developer Agent Orchestration (`antigravity-cli`)**: TUI orchestration tool for Google Antigravity, installed directly via Chaotic-AUR or built via Paru / AUR fallback. Available via `antigravity-cli` or `agy`.
+5. **Text Editor (`neovim`)**: `neovim` configured as the system default (`$EDITOR` and `$VISUAL` in `/etc/profile.d/editor.sh`), along with base `nano` and `vim`.
+6. **Media Player (`vlc`)**: Full-featured media player with comprehensive codec support out of the box.
 
 ### 5. Shell Environments & Dual Shell Support
 - **Dual Shells Installed**: Both `bash` and `fish` are pre-installed and configured out of the box.
@@ -207,16 +191,6 @@ The installer equips the system with an idiomatic, curated software stack ready 
 - **Pre-Configured Shell Profiles**:
   - `bash`: Customized `.bashrc` and `.bash_profile` featuring git branch prompts, colorized directory listings, bash completion, and terminal safety aliases.
   - `fish`: Tailored `config.fish` with modern syntax highlighting, autosuggestions, git status indicators, and clean vi/emacs keybind support.
-- **Resilient Fallback Terminal**: Includes `xfce4-terminal` alongside `alacritty` and `kitty`. The launcher wrapper `bspterm` automatically detects installed terminals and cascades smoothly, preventing black screens or missing shell errors caused by missing GPU OpenGL contexts in virtual machines.
-
-### 6. Automated Community Rice & Dotfiles (The Duck Channel)
-- **Automated Git Deployment**: Set `AUTO_INSTALL_DOTFILES="true"` to automatically fetch and deploy the popular community rice from [The Duck Channel](https://github.com/theduckchannel/bspwm-install.git).
-- **100% Offline Capable**: A full snapshot of the rice is pre-bundled into `configs/dotfiles/` so the system installs seamlessly even with no active internet connection.
-- **20+ Dynamic Color Themes**: Switch between palettes (Dracula, Nord, Gruvbox, Catppuccin, TokyoNight, etc.) anytime using `Ctrl + Alt + t` (`bsptheme`).
-- **Fixed Rofi Keyboard & Mouse Scrolling**:
-  - Automatically configured with `bspc rule -a Rofi state=floating focus=on` and `-no-lazy-grab` to eliminate focus loss and typing lockouts.
-  - Configured with `scroll-method: 1;` and `hover-select: true;` across all themes to support smooth mouse-wheel scrolling and instant hover selection.
-- **Dynamic Polybar Network & Battery**: Polybar dynamically binds to the active network interface (`wlan0` / `eth0`) and hardware battery controller (`BAT0` / `BAT1`).
 - **Vimix Dark GRUB Theme**: Sleek bootloader interface with high-resolution iconography.
 
 ---
@@ -258,15 +232,12 @@ Key configurable parameters:
 - `ENABLE_MULTILIB` (default: `true`)
 - `ENABLE_CHAOTIC_AUR` (default: `true`)
 - `INSTALL_PARU` (default: `true`)
-- `WM` / `DESKTOP_ENV` (default: `bspwm`, options: `bspwm` or `gnome`)
-- `TERMINAL` (`kitty` or `alacritty`)
-- `DISPLAY_MANAGER` (`lightdm` for bspwm, `gdm` for gnome)
+- `WM` / `DESKTOP_ENV` (default: `gnome`)
+- `DISPLAY_MANAGER` (default: `gdm`)
 - `TEXT_EDITOR` (default: `neovim`, CLI binary `nvim`)
 - `BROWSER` (default: `firefox`)
 - `MEDIA_PLAYER` (default: `vlc`)
 - `INSTALL_ANTIGRAVITY_CLI` (default: `true`)
-- `AUTO_INSTALL_DOTFILES` (default: `true`)
-- `DOTFILES_REPO_URL` (default: `https://github.com/theduckchannel/bspwm-install.git`)
 - `DISK1` / `DISK2` / `BTRFS_MODE` (only needed if overriding auto-detection)
 
 ### Step 4: Validate with Dry-Run Simulation (Recommended)
@@ -286,7 +257,7 @@ bash tests/test_common.sh
 The test suite validates:
 - Shell syntax (`bash -n`) across all installer, daemon, and dotfile scripts
 - Binary permissions (+x) on all entrypoints
-- BSPWM, SXHKD, Alacritty, Picom, Rofi, Polybar, and ZRAM configurations
+- GNOME desktop and GDM display manager validation, ZRAM configurations
 - GRUB parameters (Southern/Sea Islands flags, Btrfs preloads) and mkinitcpio early KMS order
 - Hardware profiling: CPU vendor resolution, dynamic ZRAM allocation, Btrfs single vs multi-disk layout
 - Multi-GPU classification, Early KMS mapping, and PRIME offload resolution (Intel+AMD hybrid & Intel+NVIDIA hybrid)
@@ -311,7 +282,7 @@ Or run non-interactively with customized flags:
   --root-password "yourRootPassword" \
   --disk /dev/sda \
   --fs btrfs \
-  --desktop bspwm
+  --desktop gnome
 ```
 
 The installer will probe your hardware, present the auto-detected hardware profile summary, and ask for confirmation (`YES`) before partitioning any drives:
@@ -411,27 +382,25 @@ paru -Syu
 ### 7. Snapshot Booting with `grub-btrfs`
 Whenever a snapshot of the `@` subvolume is created in `/.snapshots/` (e.g. via `snapper` or `btrfs subvolume snapshot`), `grub-btrfsd.service` automatically regenerates `/boot/grub/grub.cfg`, allowing you to boot directly into previous system snapshots from the GRUB boot menu.
 
-### 8. Verify Display Manager (LightDM)
+### 8. Verify Display Manager (GDM)
 ```bash
-# Check LightDM display manager service status:
-systemctl status lightdm.service
-
-# Verify GTK greeter and BSPWM session configuration:
-grep -E "greeter-session|user-session" /etc/lightdm/lightdm.conf
-cat /usr/share/xsessions/bspwm.desktop
+# Check GDM display manager service status:
+systemctl status gdm.service
 ```
 
 ### 9. Verify Default Software Applications
 ```bash
+# Verify GNOME Shell:
+gnome-shell --version
+
 # Verify Firefox browser:
 firefox --version
 
 # Verify VLC media player:
 vlc --version
 
-# Verify Neovim and Mousepad text editors:
+# Verify Neovim text editor:
 nvim --version
-mousepad --version
 echo "System Editor: $EDITOR | Visual Editor: $VISUAL"
 
 # Verify Antigravity CLI agent orchestration tool:
@@ -442,40 +411,27 @@ antigravity-cli --version || agy --version
 
 ## 8. Keybindings Quick Reference
 
-### BSPWM (`sxhkd`)
-- `Super + Return`: Launch terminal (`bspterm`: Alacritty / Kitty / XFCE4-terminal)
-- `Super + Shift + Return`: Launch floating terminal (`bspterm -f`)
-- `Super + d` or `Alt + F1`: Application launcher (`rofi` drun mode — guaranteed focus & mouse wheel scroll)
-- `Ctrl + Alt + t`: Theme switcher (`bsptheme` — choose from 20+ palettes: Dracula, Nord, Gruvbox, etc.)
-- `Super + Alt + w`: Random wallpaper switcher (`feh`)
-- `Super + r`: Command runner (`rofi` run mode)
-- `Super + x`: Power menu & logout prompt (`rofi` powermenu)
-- `Super + q`: Close focused window
-- `Super + t`: Launch Thunar graphical file manager
-- `Super + Shift + t`: Set window state to tiled
-- `Super + b`: Launch Firefox web browser
-- `Super + Shift + Space`: Toggle floating window
-- `Super + f`: Toggle fullscreen
-- `Super + h/j/k/l` or `Super + Arrow`: Move focus (West / South / North / East)
-- `Super + Shift + h/j/k/l` or `Super + Shift + Arrow`: Swap windows
-- `Super + 1-8`: Switch to desktop 1-8
-- `Super + Shift + 1-8`: Move window to desktop 1-8
-- `Super + Ctrl + h/v`: Preselect split direction (East / South)
-- `Super + Ctrl + Space`: Cancel preselection
-- `Super + Ctrl + r`: Restart BSPWM and reload SXHKD
-- `Super + Ctrl + q`: Quit BSPWM session
+### GNOME Desktop Environment
+- `Super`: Open Activities Overview (workspaces, applications, search)
+- `Super + A`: Open Application grid
+- `Super + Tab`: Switch between applications
+- `Alt + Tab`: Classic window switcher
+- `Super + Left/Right Arrow`: Snap window to left / right half of screen
+- `Super + Up Arrow`: Maximize window
+- `Super + Down Arrow`: Restore / minimize window
+- `Alt + F2`: Run command prompt
+- `Ctrl + Alt + T`: Launch terminal
 - `XF86AudioRaiseVolume / LowerVolume / Mute`: Audio volume controls (WirePlumber / PipeWire)
-- `XF86MonBrightnessUp / Down`: Display brightness controls (`brightnessctl`)
+- `XF86MonBrightnessUp / Down`: Display brightness controls
 
 ### Default Applications Quick Launch
 | Application | Launch Command | GUI Shortcut | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Firefox** | `firefox &` | `Super + b` or `Super + d` | Web Browsing |
-| **VLC Media Player** | `vlc &` | `Super + d` -> type `vlc` | Media Playback |
-| **Mousepad** | `mousepad &` | `Super + d` -> type `mousepad` | Lightweight GTK GUI Text Editor |
-| **Neovim** | `nvim <file>` | Terminal (`Super + Return`) | Primary Terminal Text Editor |
-| **Thunar** | `thunar &` | `Super + t` or `Super + d` | Graphical File Manager |
-| **Theme Switcher** | `bsptheme` | `Ctrl + Alt + t` | Interactive 20+ Rice Palette Switcher |
-| **Antigravity CLI** | `antigravity-cli` or `agy` | Terminal (`Super + Return`) | Agentic AI Orchestration TUI |
-| **Paru** | `paru <pkg>` | Terminal (`Super + Return`) | AUR Package Helper & Pacman Wrapper |
+| **Firefox** | `firefox &` | `Super` -> type `firefox` | Web Browsing |
+| **VLC Media Player** | `vlc &` | `Super` -> type `vlc` | Media Playback |
+| **Neovim** | `nvim <file>` | Terminal (`Ctrl + Alt + T`) | Primary Text Editor |
+| **GNOME Files (Nautilus)** | `nautilus &` | `Super` -> type `files` | Graphical File Manager |
+| **GNOME Tweaks** | `gnome-tweaks &` | `Super` -> type `tweaks` | Desktop Customization |
+| **Antigravity CLI** | `antigravity-cli` or `agy` | Terminal (`Ctrl + Alt + T`) | Agentic AI Orchestration TUI |
+| **Paru** | `paru <pkg>` | Terminal (`Ctrl + Alt + T`) | AUR Package Helper & Pacman Wrapper |
 

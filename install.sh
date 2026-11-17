@@ -84,12 +84,11 @@ show_summary() {
     echo -e "  Primary User:               ${USERNAME}"
     echo -e "  User Password:              $([[ -n "${USER_PASSWORD:-}" ]] && echo "[Configured]" || echo "[Not Set - Will prompt in chroot]")"
     echo -e "  Root Password:              $([[ -n "${ROOT_PASSWORD:-}" ]] && echo "[Configured]" || echo "[Not Set - Will prompt in chroot]")"
-    echo -e "  Desktop Environment:        ${CLR_BOLD}${DESKTOP_ENV:-bspwm}${CLR_RESET}"
-    echo -e "  Display Manager:            ${CLR_BOLD}${DISPLAY_MANAGER}${CLR_RESET}"
-    echo -e "  Terminal Emulator:          ${TERMINAL}"
+    echo -e "  Desktop Environment:        ${CLR_BOLD}${DESKTOP_ENV:-gnome}${CLR_RESET}"
+    echo -e "  Display Manager:            ${CLR_BOLD}${DISPLAY_MANAGER:-gdm}${CLR_RESET}"
     echo -e "  Default Web Browser:        ${BROWSER:-firefox}"
     echo -e "  Default Media Player:       ${MEDIA_PLAYER:-vlc}"
-    echo -e "  Default Text Editor:        ${TEXT_EDITOR:-neovim} / mousepad"
+    echo -e "  Default Text Editor:        ${TEXT_EDITOR:-neovim}"
     echo -e "================================================================================"
 }
 
@@ -189,31 +188,13 @@ run_interactive_wizard() {
     fi
 
     # ----------------------------------------------------------------------
-    # 3. Desktop Environment & Display Manager Selection
+    # 3. Desktop Environment & Display Manager
     # ----------------------------------------------------------------------
-    echo -e "\n${CLR_STEP}--> [3/4] Desktop Environment & Display Manager Selection${CLR_RESET}"
-    echo -e "Select graphical desktop interface:"
-    echo -e "  ${CLR_BOLD}1) bspwm${CLR_RESET} - Minimalist tiling window manager + LightDM display manager + Polybar + Rofi + Dunst"
-    echo -e "  ${CLR_BOLD}2) gnome${CLR_RESET} - Modern full-featured GNOME desktop environment + GDM display manager"
-
-    local default_de="1"
-    if [[ "${DESKTOP_ENV:-}" == "gnome" ]]; then
-        default_de="2"
-    fi
-    read -rp "Enter choice [1 or 2, Default: ${default_de}]: " DE_CHOICE
-    DE_CHOICE="${DE_CHOICE:-$default_de}"
-
-    if [[ "$DE_CHOICE" == "2" ]]; then
-        DESKTOP_ENV="gnome"
-        WM="gnome"
-        DISPLAY_MANAGER="gdm"
-        log_info "Selected Desktop: GNOME (Display Manager: GDM)"
-    else
-        DESKTOP_ENV="bspwm"
-        WM="bspwm"
-        DISPLAY_MANAGER="lightdm"
-        log_info "Selected Desktop: BSPWM (Display Manager: LightDM)"
-    fi
+    echo -e "\n${CLR_STEP}--> [3/4] Desktop Environment & Display Manager${CLR_RESET}"
+    DESKTOP_ENV="gnome"
+    WM="gnome"
+    DISPLAY_MANAGER="gdm"
+    log_info "Configured Desktop: GNOME (Display Manager: GDM)"
 
     # ----------------------------------------------------------------------
     # 4. User Account & Password Provisioning
@@ -311,15 +292,9 @@ main() {
                 shift 2
                 ;;
             --desktop|--de|--wm)
-                DESKTOP_ENV="$2"
-                WM="$2"
-                if [[ "${EXPLICIT_DISPLAY_MANAGER:-false}" != "true" ]]; then
-                    if [[ "$2" == "gnome" ]]; then
-                        DISPLAY_MANAGER="gdm"
-                    elif [[ "$2" == "bspwm" ]]; then
-                        DISPLAY_MANAGER="lightdm"
-                    fi
-                fi
+                DESKTOP_ENV="gnome"
+                WM="gnome"
+                DISPLAY_MANAGER="gdm"
                 shift 2
                 ;;
             --display-manager|--dm)
@@ -369,8 +344,8 @@ main() {
                 echo "  --disk-layout <single|all> : Choose single-disk or all-disks target layout"
                 echo "  --disk <device>            : Specify primary target drive (e.g. /dev/sda, /dev/nvme0n1)"
                 echo "  --fs <btrfs|ext4|xfs|f2fs> : Choose root filesystem / partition scheme"
-                echo "  --desktop <bspwm|gnome>    : Choose desktop environment"
-                echo "  --display-manager <dm>     : Choose display manager (lightdm, gdm)"
+                echo "  --desktop <gnome>          : Desktop environment (GNOME)"
+                echo "  --display-manager <gdm>    : Display manager (GDM)"
                 echo "  --media-player <player>    : Choose default media player (vlc)"
                 echo "  --username, -u <name>      : Specify primary user account (default: archie)"
                 echo "  --user-password, -p <pass> : Specify user password"
@@ -500,11 +475,11 @@ EOF
         echo -e ""
     fi
     echo -e "${CLR_BOLD}Default Software & Desktop Environment:${CLR_RESET}"
-    echo -e "  - Desktop Interface: ${CLR_BOLD}${DESKTOP_ENV:-bspwm}${CLR_RESET}"
-    echo -e "  - Display Manager:   ${CLR_BOLD}${DISPLAY_MANAGER}${CLR_RESET}"
+    echo -e "  - Desktop Interface: ${CLR_BOLD}${DESKTOP_ENV:-gnome}${CLR_RESET}"
+    echo -e "  - Display Manager:   ${CLR_BOLD}${DISPLAY_MANAGER:-gdm}${CLR_RESET}"
     echo -e "  - Web Browser:       ${CLR_BOLD}${BROWSER:-firefox}${CLR_RESET}"
     echo -e "  - Media Player:      ${CLR_BOLD}${MEDIA_PLAYER:-vlc}${CLR_RESET}"
-    echo -e "  - Text Editors:      ${CLR_BOLD}${TEXT_EDITOR:-neovim}${CLR_RESET} (CLI) & ${CLR_BOLD}Mousepad${CLR_RESET} (GTK GUI)"
+    echo -e "  - Text Editor:       ${CLR_BOLD}${TEXT_EDITOR:-neovim}${CLR_RESET} (CLI)"
     if [[ "${INSTALL_ANTIGRAVITY_CLI:-true}" == "true" ]]; then
         echo -e "  - Developer Tools:   ${CLR_BOLD}antigravity-cli${CLR_RESET} (Run via 'antigravity-cli' or 'agy')"
     fi

@@ -567,8 +567,8 @@ print_hardware_report() {
     fi
 
     # Desktop Environment & Display Manager
-    echo -e "  Desktop Environment:    ${CLR_BOLD}${DESKTOP_ENV:-bspwm}${CLR_RESET}"
-    echo -e "  Display Manager:        ${CLR_BOLD}${DISPLAY_MANAGER:-lightdm}${CLR_RESET}"
+    echo -e "  Desktop Environment:    ${CLR_BOLD}${DESKTOP_ENV:-gnome}${CLR_RESET}"
+    echo -e "  Display Manager:        ${CLR_BOLD}${DISPLAY_MANAGER:-gdm}${CLR_RESET}"
 
     # Graphics
     echo -e "  Graphics Architecture:  ${CLR_BOLD}${DETECTED_GPU_SETUP}${CLR_RESET}"
@@ -653,15 +653,9 @@ apply_hardware_profile() {
     SECONDARY_MOUNT="${SECONDARY_MOUNT:-/data}"
 
     # 4. Desktop Environment & Display Manager
-    DESKTOP_ENV="${DESKTOP_ENV:-${WM:-bspwm}}"
-    WM="${DESKTOP_ENV}"
-    if [[ -z "${DISPLAY_MANAGER:-}" || ( "${DESKTOP_ENV}" == "gnome" && "${DISPLAY_MANAGER:-}" == "lightdm" && "${EXPLICIT_DISPLAY_MANAGER:-false}" != "true" ) ]]; then
-        if [[ "${DESKTOP_ENV}" == "gnome" ]]; then
-            DISPLAY_MANAGER="gdm"
-        else
-            DISPLAY_MANAGER="lightdm"
-        fi
-    fi
+    DESKTOP_ENV="gnome"
+    WM="gnome"
+    DISPLAY_MANAGER="gdm"
     MEDIA_PLAYER="${MEDIA_PLAYER:-vlc}"
 
     # 5. Graphics & KMS

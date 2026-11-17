@@ -44,10 +44,9 @@ test_assert_eq "Default DISK2" "/dev/sdb" "${DISK2}"
 test_assert_eq "Default FILESYSTEM" "btrfs" "${FILESYSTEM}"
 test_assert_eq "Default BTRFS_MODE" "raid0" "${BTRFS_MODE}"
 test_assert_eq "BTRFS_MOUNT_OPTS contains zstd" "true" "$([[ "${BTRFS_MOUNT_OPTS}" =~ compress=zstd:3 ]] && echo true || echo false)"
-test_assert_eq "Default DESKTOP_ENV" "bspwm" "${DESKTOP_ENV}"
-test_assert_eq "Default WM" "bspwm" "${WM}"
-test_assert_eq "Default TERMINAL" "kitty" "${TERMINAL}"
-test_assert_eq "Default DISPLAY_MANAGER" "lightdm" "${DISPLAY_MANAGER}"
+test_assert_eq "Default DESKTOP_ENV" "gnome" "${DESKTOP_ENV}"
+test_assert_eq "Default WM" "gnome" "${WM}"
+test_assert_eq "Default DISPLAY_MANAGER" "gdm" "${DISPLAY_MANAGER}"
 test_assert_eq "Default TEXT_EDITOR" "neovim" "${TEXT_EDITOR}"
 test_assert_eq "Default BROWSER" "firefox" "${BROWSER}"
 test_assert_eq "Default MEDIA_PLAYER" "vlc" "${MEDIA_PLAYER}"
@@ -72,16 +71,11 @@ test_assert_eq "GPU setup is detected non-empty" "true" "$([[ -n "${DETECTED_GPU
 test_assert_eq "CPU Microcode package is set" "true" "$([[ -n "${CPU_UCODE_PACKAGE}" ]] && echo true || echo false)"
 test_assert_eq "GRAPHICS_PACKAGES is populated" "true" "$([[ ${#GRAPHICS_PACKAGES[@]} -gt 0 ]] && echo true || echo false)"
 
-# 4b. Test Desktop Environment and Display Manager Dynamic Resolution
+# 4b. Test Desktop Environment and Display Manager Resolution
 DESKTOP_ENV="gnome"
 DISPLAY_MANAGER=""
 apply_hardware_profile
 test_assert_eq "GNOME desktop resolves to GDM display manager" "gdm" "${DISPLAY_MANAGER}"
-
-DESKTOP_ENV="bspwm"
-DISPLAY_MANAGER=""
-apply_hardware_profile
-test_assert_eq "BSPWM desktop resolves to LightDM display manager" "lightdm" "${DISPLAY_MANAGER}"
 
 # 4c. Test Filesystem choices
 FILESYSTEM="ext4"

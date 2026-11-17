@@ -1,5 +1,5 @@
 # ~/.bashrc
-# Interactive Bash Configuration for Arch Linux BSPWM Workstation
+# Interactive Bash Configuration for Arch Linux GNOME Workstation
 
 # If not running interactively, don't do anything
 [[ $- != *i* ]] && return
@@ -12,7 +12,7 @@ shopt -s histappend
 shopt -s checkwinsize
 
 # Export user environment paths
-export PATH="$HOME/.local/bin:$HOME/.config/bspwm/bin:/usr/local/bin:$PATH"
+export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 
 # Editor environment
 export EDITOR="nvim"
@@ -53,11 +53,6 @@ alias free='free -m'
 # Package management helpers
 alias pac-update='sudo pacman -Syu'
 alias pac-clean='sudo pacman -Rns $(pacman -Qtdq) 2>/dev/null || true'
-
-# Rice and WM quick commands
-alias bspwm-reload='bspc wm -r'
-alias sxhkd-reload='pkill -USR1 -x sxhkd'
-alias theme-menu='~/.config/bspwm/rofi/bin/themes'
 
 # Source system bash-completion if available
 if [[ -f /usr/share/bash-completion/bash_completion ]]; then

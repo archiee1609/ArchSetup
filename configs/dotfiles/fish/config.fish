@@ -1,11 +1,11 @@
 # ~/.config/fish/config.fish
-# Modern Fish Shell Configuration for Arch Linux BSPWM Workstation
+# Modern Fish Shell Configuration for Arch Linux GNOME Workstation
 
 # Disable default startup greeting
 set -g fish_greeting ""
 
 # Environment PATH exports
-fish_add_path -g $HOME/.local/bin $HOME/.config/bspwm/bin /usr/local/bin
+fish_add_path -g $HOME/.local/bin /usr/local/bin
 
 # Text editor preferences
 set -gx EDITOR nvim
@@ -42,11 +42,6 @@ alias free='free -m'
 # Package management helpers
 alias pac-update='sudo pacman -Syu'
 alias pac-clean='sudo pacman -Rns (pacman -Qtdq 2>/dev/null) 2>/dev/null; or true'
-
-# Rice and WM quick commands
-alias bspwm-reload='bspc wm -r'
-alias sxhkd-reload='pkill -USR1 -x sxhkd'
-alias theme-menu='~/.config/bspwm/rofi/bin/themes'
 
 # Clean interactive prompt with Git integration
 function fish_prompt

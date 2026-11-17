@@ -78,32 +78,7 @@ def run_tests():
         "lib/common.sh",
         "lib/detect.sh",
         "configs/amdgpu/prime-run",
-        "configs/dotfiles/bspwm/bspwmrc",
-        "configs/dotfiles/polybar/launch.sh",
-        "configs/dotfiles/xinitrc",
         "tests/test_common.sh",
-        "configs/dotfiles/bspwm/bin/bspterm",
-        "configs/dotfiles/bspwm/bin/bspcolors",
-        "configs/dotfiles/bspwm/bin/bspcomp",
-        "configs/dotfiles/bspwm/bin/bspbar",
-        "configs/dotfiles/bspwm/bin/bspfloat",
-        "configs/dotfiles/bspwm/bin/bsplock",
-        "configs/dotfiles/bspwm/bin/winmask",
-        "configs/dotfiles/bspwm/bin/apps_as_root",
-        "configs/dotfiles/bspwm/bin/askpass",
-        "configs/dotfiles/bspwm/rofi/bin/launcher",
-        "configs/dotfiles/bspwm/rofi/bin/themes",
-        "configs/dotfiles/bspwm/rofi/bin/windows",
-        "configs/dotfiles/bspwm/rofi/bin/powermenu",
-        "configs/dotfiles/bspwm/rofi/bin/asroot",
-        "configs/dotfiles/bspwm/rofi/bin/confirm",
-        "configs/dotfiles/bspwm/rofi/bin/mpd",
-        "configs/dotfiles/bspwm/rofi/bin/network",
-        "configs/dotfiles/bspwm/rofi/bin/screenshot",
-        "configs/dotfiles/bspwm/themes/set-theme",
-        "configs/dotfiles/dunst/notification.sh",
-        "configs/dotfiles/dunst/test.sh",
-        "configs/dotfiles/.fehbg",
     ]
 
     for script in shell_scripts:
@@ -125,9 +100,6 @@ def run_tests():
         "lib/common.sh",
         "lib/detect.sh",
         "configs/amdgpu/prime-run",
-        "configs/dotfiles/bspwm/bspwmrc",
-        "configs/dotfiles/polybar/launch.sh",
-        "configs/dotfiles/xinitrc",
     ]
 
     for target in executable_targets:
@@ -136,35 +108,21 @@ def run_tests():
         report(f"Executable bit (+x): {target}", is_exec, "Executable permission missing")
 
     # ------------------------------------------------------------------------------
-    # 3. BSPWM & SXHKD Configuration Validation
+    # 3. BSPWM, Kitty, Alacritty & Rice Removal Validation
     # ------------------------------------------------------------------------------
-    print(f"\n{BLUE}--- 3. Testing BSPWM & SXHKD Configurations ---{RESET}")
-    report("Qtile completely removed from configs", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/qtile")))
-
-    bspwmrc_path = os.path.join(REPO_DIR, "configs/dotfiles/bspwm/bspwmrc")
-    try:
-        with open(bspwmrc_path, "r", encoding="utf-8") as f:
-            bspwmrc_content = f.read()
-        report("BSPWM config exists", True)
-        report("BSPWM config launches sxhkd", "sxhkd" in bspwmrc_content)
-        report("BSPWM config configures monitors", "bspc monitor" in bspwmrc_content)
-        report("BSPWM config launches picom", "bspcomp" in bspwmrc_content or "picom" in bspwmrc_content)
-        report("BSPWM config launches polybar", "bspbar" in bspwmrc_content or "polybar" in bspwmrc_content)
-        report("BSPWM config enforces Rofi focus", "bspc rule -a Rofi state=floating focus=on" in bspwmrc_content)
-    except Exception as e:
-        report("BSPWM config validation", False, str(e))
-
-    sxhkdrc_path = os.path.join(REPO_DIR, "configs/dotfiles/sxhkd/sxhkdrc")
-    try:
-        with open(sxhkdrc_path, "r", encoding="utf-8") as f:
-            sxhkdrc_content = f.read()
-        report("SXHKD config exists", True)
-        report("SXHKD config defines terminal shortcut", "super + Return" in sxhkdrc_content)
-        report("SXHKD config defines launcher shortcut", "rofi" in sxhkdrc_content or "launcher" in sxhkdrc_content)
-        report("SXHKD config defines workspace navigation", "bspc desktop -f" in sxhkdrc_content)
-        report("SXHKD config defines quit command", "bspc quit" in sxhkdrc_content)
-    except Exception as e:
-        report("SXHKD config validation", False, str(e))
+    print(f"\n{BLUE}--- 3. Testing Complete Removal of BSPWM, Kitty, Alacritty & Dependencies ---{RESET}")
+    report("BSPWM dotfiles completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/bspwm")))
+    report("SXHKD dotfiles completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/sxhkd")))
+    report("Polybar dotfiles completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/polybar")))
+    report("Rofi dotfiles completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/rofi")))
+    report("Picom dotfiles completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/picom")))
+    report("Dunst dotfiles completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/dunst")))
+    report("Kitty dotfiles completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/kitty")))
+    report("Alacritty dotfiles completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/alacritty")))
+    report("Xresources dotfiles completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/Xresources")))
+    report("xinitrc completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/xinitrc")))
+    report(".fehbg completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/.fehbg")))
+    report(".xsettingsd completely removed", not os.path.exists(os.path.join(REPO_DIR, "configs/dotfiles/.xsettingsd")))
 
     # ------------------------------------------------------------------------------
     # 3b. Shells Configuration Validation (Bash & Fish)
@@ -177,6 +135,7 @@ def run_tests():
             b_txt = f.read()
         report("Bash .bashrc defines interactive prompt", "PS1=" in b_txt)
         report("Bash .bashrc exports user path", 'export PATH=' in b_txt)
+        report("Bash .bashrc does not reference bspwm", "bspwm" not in b_txt)
 
     fish_config_path = os.path.join(REPO_DIR, "configs/dotfiles/fish/config.fish")
     report("Fish config.fish exists", os.path.isfile(fish_config_path))
@@ -185,39 +144,12 @@ def run_tests():
             fish_txt = f.read()
         report("Fish config defines interactive prompt", "function fish_prompt" in fish_txt)
         report("Fish config defines environment paths", "fish_add_path" in fish_txt)
+        report("Fish config does not reference bspwm", "bspwm" not in fish_txt)
 
     # ------------------------------------------------------------------------------
-    # 4. Alacritty TOML Configuration Validation
+    # 5. ZRAM INI Validation
     # ------------------------------------------------------------------------------
-    print(f"\n{BLUE}--- 4. Testing Alacritty TOML Configuration ---{RESET}")
-    alacritty_config_path = os.path.join(REPO_DIR, "configs/dotfiles/alacritty/alacritty.toml")
-    try:
-        with open(alacritty_config_path, "rb") as f:
-            alacritty_data = tomllib.load(f)
-        report("Alacritty TOML valid format", True)
-        report("Alacritty 'font' table defined", "font" in alacritty_data, "Missing [font]")
-        report("Alacritty 'colors' table defined", "colors" in alacritty_data, "Missing [colors]")
-        report("Alacritty 'window' table defined", "window" in alacritty_data, "Missing [window]")
-    except Exception as e:
-        report("Alacritty TOML parsing", False, str(e))
-
-    # ------------------------------------------------------------------------------
-    # 5. Polybar & ZRAM INI Validation
-    # ------------------------------------------------------------------------------
-    print(f"\n{BLUE}--- 5. Testing INI Configurations (Polybar & ZRAM) ---{RESET}")
-    polybar_config_path = os.path.join(REPO_DIR, "configs/dotfiles/polybar/config.ini")
-    try:
-        poly_cfg = configparser.ConfigParser()
-        poly_cfg.read(polybar_config_path, encoding="utf-8")
-        report("Polybar INI valid format", True)
-        report("Polybar 'bar/main' defined", poly_cfg.has_section("bar/main"))
-        report("Polybar 'module/bspwm' defined", poly_cfg.has_section("module/bspwm"))
-        report("Polybar 'module/cpu' defined", poly_cfg.has_section("module/cpu"))
-        report("Polybar 'module/memory' defined", poly_cfg.has_section("module/memory"))
-        report("Polybar 'module/battery' defined", poly_cfg.has_section("module/battery"))
-    except Exception as e:
-        report("Polybar INI parsing", False, str(e))
-
+    print(f"\n{BLUE}--- 5. Testing ZRAM INI Configuration ---{RESET}")
     zram_config_path = os.path.join(REPO_DIR, "configs/zram/zram-generator.conf")
     try:
         zram_cfg = configparser.ConfigParser()
@@ -230,35 +162,6 @@ def run_tests():
         report("ZRAM compression is zstd", algo_val.strip() == "zstd", f"Got: {algo_val}")
     except Exception as e:
         report("ZRAM INI parsing", False, str(e))
-
-    # ------------------------------------------------------------------------------
-    # 6. Picom & Rofi Configuration Syntax Checks
-    # ------------------------------------------------------------------------------
-    print(f"\n{BLUE}--- 6. Testing Picom & Rofi Configurations ---{RESET}")
-    picom_path = os.path.join(REPO_DIR, "configs/dotfiles/picom/picom.conf")
-    try:
-        with open(picom_path, "r", encoding="utf-8") as f:
-            picom_text = f.read()
-        report("Picom GLX backend enabled", 'backend = "glx";' in picom_text)
-        report("Picom VSync enabled", "vsync = true;" in picom_text)
-        report("Picom glx-no-stencil enabled", "glx-no-stencil = true;" in picom_text)
-        report("Picom unredir-if-possible is false", "unredir-if-possible = false;" in picom_text)
-        open_braces = picom_text.count("{")
-        close_braces = picom_text.count("}")
-        report("Picom braces balanced", open_braces == close_braces, f"{{: {open_braces}, }}: {close_braces}")
-    except Exception as e:
-        report("Picom config check", False, str(e))
-
-    rofi_path = os.path.join(REPO_DIR, "configs/dotfiles/rofi/config.rasi")
-    try:
-        with open(rofi_path, "r", encoding="utf-8") as f:
-            rofi_text = f.read()
-        report("Rofi drun mode configured", 'modi: "drun,run,window";' in rofi_text)
-        open_braces = rofi_text.count("{")
-        close_braces = rofi_text.count("}")
-        report("Rofi braces balanced", open_braces == close_braces, f"{{: {open_braces}, }}: {close_braces}")
-    except Exception as e:
-        report("Rofi config check", False, str(e))
 
     # ------------------------------------------------------------------------------
     # 7. GRUB Default Kernel Parameters Check
@@ -329,39 +232,24 @@ def run_tests():
         # 2. Simulate Stage 2 user dotfiles deployment
         mock_user_home = os.path.join(mock_mnt, "home/testuser")
         mock_user_config = os.path.join(mock_user_home, ".config")
-        os.makedirs(os.path.join(mock_user_config, "bspwm"), exist_ok=True)
-        os.makedirs(os.path.join(mock_user_config, "sxhkd"), exist_ok=True)
-        os.makedirs(os.path.join(mock_user_config, "polybar"), exist_ok=True)
-        os.makedirs(os.path.join(mock_user_config, "picom"), exist_ok=True)
-        os.makedirs(os.path.join(mock_user_config, "rofi"), exist_ok=True)
-        os.makedirs(os.path.join(mock_user_config, "kitty"), exist_ok=True)
-        os.makedirs(os.path.join(mock_user_config, "alacritty"), exist_ok=True)
         os.makedirs(os.path.join(mock_user_config, "fish"), exist_ok=True)
+        os.makedirs(os.path.join(mock_user_config, "nvim"), exist_ok=True)
 
         configs_dir = os.path.join(installer_dir, "configs")
-        shutil.copy(os.path.join(configs_dir, "dotfiles/picom/picom.conf"), os.path.join(mock_user_config, "picom/picom.conf"))
-        shutil.copy(os.path.join(configs_dir, "dotfiles/rofi/config.rasi"), os.path.join(mock_user_config, "rofi/config.rasi"))
-        shutil.copy(os.path.join(configs_dir, "dotfiles/kitty/kitty.conf"), os.path.join(mock_user_config, "kitty/kitty.conf"))
-        shutil.copy(os.path.join(configs_dir, "dotfiles/alacritty/alacritty.toml"), os.path.join(mock_user_config, "alacritty/alacritty.toml"))
-        shutil.copy(os.path.join(configs_dir, "dotfiles/bspwm/bspwmrc"), os.path.join(mock_user_config, "bspwm/bspwmrc"))
-        shutil.copy(os.path.join(configs_dir, "dotfiles/sxhkd/sxhkdrc"), os.path.join(mock_user_config, "sxhkd/sxhkdrc"))
-        shutil.copy(os.path.join(configs_dir, "dotfiles/polybar/config.ini"), os.path.join(mock_user_config, "polybar/config.ini"))
-        shutil.copy(os.path.join(configs_dir, "dotfiles/polybar/launch.sh"), os.path.join(mock_user_config, "polybar/launch.sh"))
-        shutil.copy(os.path.join(configs_dir, "dotfiles/xinitrc"), os.path.join(mock_user_home, ".xinitrc"))
         shutil.copy(os.path.join(configs_dir, "dotfiles/bash/.bashrc"), os.path.join(mock_user_home, ".bashrc"))
+        shutil.copy(os.path.join(configs_dir, "dotfiles/bash/.bash_profile"), os.path.join(mock_user_home, ".bash_profile"))
         shutil.copy(os.path.join(configs_dir, "dotfiles/fish/config.fish"), os.path.join(mock_user_config, "fish/config.fish"))
 
         all_dotfiles_exist = all([
-            not os.path.exists(os.path.join(mock_user_config, "qtile")),
-            os.path.isfile(os.path.join(mock_user_config, "bspwm/bspwmrc")),
-            os.path.isfile(os.path.join(mock_user_config, "sxhkd/sxhkdrc")),
-            os.path.isfile(os.path.join(mock_user_config, "polybar/config.ini")),
-            os.path.isfile(os.path.join(mock_user_config, "picom/picom.conf")),
-            os.path.isfile(os.path.join(mock_user_config, "rofi/config.rasi")),
-            os.path.isfile(os.path.join(mock_user_config, "kitty/kitty.conf")),
-            os.path.isfile(os.path.join(mock_user_config, "alacritty/alacritty.toml")),
-            os.path.isfile(os.path.join(mock_user_home, ".xinitrc")),
+            not os.path.exists(os.path.join(mock_user_config, "bspwm")),
+            not os.path.exists(os.path.join(mock_user_config, "sxhkd")),
+            not os.path.exists(os.path.join(mock_user_config, "polybar")),
+            not os.path.exists(os.path.join(mock_user_config, "picom")),
+            not os.path.exists(os.path.join(mock_user_config, "rofi")),
+            not os.path.exists(os.path.join(mock_user_config, "kitty")),
+            not os.path.exists(os.path.join(mock_user_config, "alacritty")),
             os.path.isfile(os.path.join(mock_user_home, ".bashrc")),
+            os.path.isfile(os.path.join(mock_user_home, ".bash_profile")),
             os.path.isfile(os.path.join(mock_user_config, "fish/config.fish")),
         ])
         report("All user dotfiles deployed properly to target paths", all_dotfiles_exist)
@@ -420,17 +308,17 @@ def run_tests():
 
         report("Firefox is included in default packages", "firefox" in stage2_content)
         report("VLC is included in default packages", "vlc" in stage2_content)
-        report("Text editor (neovim/mousepad) is included", "neovim" in stage2_content and "mousepad" in stage2_content)
+        report("Text editor (neovim) is included", "neovim" in stage2_content)
         report("Neovim binary alias and profile configured", "nvim" in stage2_content)
-        report("BSPWM and LightDM support is present", "bspwm" in stage2_content and "lightdm" in stage2_content)
-        report("Screen locker (i3lock) included for BSPWM", "i3lock" in stage2_content)
+        report("BSPWM and LightDM completely removed", "bspwm" not in stage2_content and "lightdm" not in stage2_content)
+        report("Screen locker (i3lock) removed", "i3lock" not in stage2_content)
         report("GNOME and GDM support is present", "gnome" in stage2_content and "gdm" in stage2_content)
-        report("LightDM service enablement present", "systemctl enable lightdm.service" in stage2_content)
+        report("LightDM service enablement removed", "systemctl enable lightdm.service" not in stage2_content)
         report("GDM service enablement present", "systemctl enable gdm.service" in stage2_content)
         report("antigravity-cli installation step present", "antigravity-cli" in stage2_content)
         report("stage2 installs shells (bash, fish)", "bash" in stage2_content and "fish" in stage2_content)
-        report("stage2 installs Alacritty terminal", "alacritty" in stage2_content)
-        report("stage2 installs Thunar file manager for BSPWM", "thunar" in stage2_content)
+        report("Alacritty and Kitty removed from stage2", "alacritty" not in stage2_content and "kitty" not in stage2_content)
+        report("Thunar removed from stage2", "thunar" not in stage2_content)
         report("stage2 supports root and user password via chpasswd", "echo \"root:${ROOT_PASSWORD" in stage2_content and "echo \"${USERNAME}:${USER_PASSWORD" in stage2_content)
         report("stage2 sources credentials.env if present", "credentials.env" in stage2_content)
         report("stage2 cleans up credentials.env post provisioning", "credentials.env" in stage2_content and "rm -f" in stage2_content)
@@ -499,12 +387,6 @@ def run_tests():
     )
     report("GNOME environment automatically pairs with GDM", test_de_gnome.stdout.strip() == "gnome|gdm", test_de_gnome.stdout.strip())
 
-    test_de_bspwm = subprocess.run(
-        [BASH_BIN, "-c", f'source "{detect_sh_path}" && DESKTOP_ENV="bspwm" && DISPLAY_MANAGER="" && apply_hardware_profile && echo "$DESKTOP_ENV|$DISPLAY_MANAGER"'],
-        capture_output=True, text=True
-    )
-    report("BSPWM environment automatically pairs with LightDM", test_de_bspwm.stdout.strip() == "bspwm|lightdm", test_de_bspwm.stdout.strip())
-
     # 4c. Test Filesystem choices
     test_fs_ext4 = subprocess.run(
         [BASH_BIN, "-c", f'source "{detect_sh_path}" && FILESYSTEM="ext4" && apply_hardware_profile && echo "$FILESYSTEM|$EXT4_MOUNT_OPTS"'],
@@ -546,25 +428,6 @@ echo "$DETECTED_GPU_SETUP|$DETECTED_PRIME_TYPE"
         capture_output=True, text=True
     )
     report("Intel+NVIDIA sets intel-nvidia-hybrid & nvidia prime", "intel-nvidia-hybrid|nvidia" in test_gpu_nvidia.stdout.strip(), test_gpu_nvidia.stdout.strip())
-
-    # 6. Test Polybar battery adaptation for desktop/VM vs laptop
-    with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
-        poly_temp_path = tf.name
-        tf.write("""[bar/main]
-modules-right = cpu memory battery pulseaudio date
-[module/battery]
-battery = BAT0
-adapter = ADP1
-""")
-
-    try:
-        subprocess.run([BASH_BIN, "-c", f'sed -i "s/modules-right = cpu memory battery pulseaudio date/modules-right = cpu memory pulseaudio date/" "{to_posix(poly_temp_path)}"'], check=True)
-        with open(poly_temp_path) as f:
-            poly_no_bat = f.read()
-        report("Polybar removes battery module when no battery present", "battery pulseaudio" not in poly_no_bat and "pulseaudio date" in poly_no_bat)
-    finally:
-        if os.path.exists(poly_temp_path):
-            os.remove(poly_temp_path)
 
     # 7. Test save_hardware_profile persistence
     with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
