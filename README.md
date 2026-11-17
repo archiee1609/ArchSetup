@@ -249,9 +249,12 @@ nano config.env
 ```
 Key configurable parameters:
 - `USERNAME` (default: `archie`)
+- `USER_PASSWORD` (optional pre-set password for user account; prompts in wizard if omitted)
+- `ROOT_PASSWORD` (optional pre-set password for root administrative account; prompts in wizard if omitted)
 - `DEFAULT_SHELL` (default: `fish`, options: `fish` or `bash`)
 - `TIMEZONE` (default: `UTC`)
 - `LOCALE` (default: `en_US.UTF-8`)
+- `HOSTNAME` (default: `arch-workstation`)
 - `ENABLE_MULTILIB` (default: `true`)
 - `ENABLE_CHAOTIC_AUR` (default: `true`)
 - `INSTALL_PARU` (default: `true`)
@@ -295,9 +298,20 @@ Make scripts executable:
 chmod +x install.sh stage1_disk_base.sh stage2_chroot.sh lib/detect.sh
 ```
 
-Run the master installer:
+Run the master installer (interactive wizard with credential prompts):
 ```bash
 ./install.sh
+```
+
+Or run non-interactively with customized flags:
+```bash
+./install.sh --non-interactive \
+  --username archie \
+  --user-password "yourSecretPassword" \
+  --root-password "yourRootPassword" \
+  --disk /dev/sda \
+  --fs btrfs \
+  --desktop bspwm
 ```
 
 The installer will probe your hardware, present the auto-detected hardware profile summary, and ask for confirmation (`YES`) before partitioning any drives:

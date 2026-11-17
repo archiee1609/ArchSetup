@@ -272,7 +272,7 @@ partprobe "${DISK1}" 2>/dev/null || true
 if [[ "${DISK_LAYOUT}" == "all" && -n "${DISK2:-}" ]]; then
     partprobe "${DISK2}" 2>/dev/null || true
 fi
-sleep 1
+command -v udevadm >/dev/null 2>&1 && udevadm settle 2>/dev/null || sleep 2
 
 # Resolve partition paths
 PART_EFI="$(get_partition_name "${DISK1}" 1)"
@@ -520,6 +520,10 @@ cp -r "${SCRIPT_DIR}/lib" "${CHROOT_INSTALLER_DIR}/"
 cp -r "${SCRIPT_DIR}/configs" "${CHROOT_INSTALLER_DIR}/"
 if [[ -f "${SCRIPT_DIR}/hardware.env" ]]; then
     cp "${SCRIPT_DIR}/hardware.env" "${CHROOT_INSTALLER_DIR}/"
+fi
+if [[ -f "${SCRIPT_DIR}/credentials.env" ]]; then
+    cp "${SCRIPT_DIR}/credentials.env" "${CHROOT_INSTALLER_DIR}/"
+    chmod 600 "${CHROOT_INSTALLER_DIR}/credentials.env" 2>/dev/null || true
 fi
 cp "${SCRIPT_DIR}/stage2_chroot.sh" "${CHROOT_INSTALLER_DIR}/"
 chmod +x "${CHROOT_INSTALLER_DIR}/stage2_chroot.sh"

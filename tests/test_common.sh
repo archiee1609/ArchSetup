@@ -129,6 +129,8 @@ test_assert_eq "Hardware profile contains FILESYSTEM" "true" "$(grep -q "^FILESY
 test_assert_eq "Hardware profile contains DESKTOP_ENV" "true" "$(grep -q "^DESKTOP_ENV=" "$MOCK_HW_FILE" && echo true || echo false)"
 test_assert_eq "Hardware profile contains DISPLAY_MANAGER" "true" "$(grep -q "^DISPLAY_MANAGER=" "$MOCK_HW_FILE" && echo true || echo false)"
 test_assert_eq "Hardware profile contains MEDIA_PLAYER" "true" "$(grep -q "^MEDIA_PLAYER=" "$MOCK_HW_FILE" && echo true || echo false)"
+test_assert_eq "Hardware profile contains USERNAME" "true" "$(grep -q "^USERNAME=" "$MOCK_HW_FILE" && echo true || echo false)"
+test_assert_eq "Hardware profile contains DEFAULT_SHELL" "true" "$(grep -q "^DEFAULT_SHELL=" "$MOCK_HW_FILE" && echo true || echo false)"
 rm -f "$MOCK_HW_FILE"
 
 # 6. Test logging functions don't fail under pipefail

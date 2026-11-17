@@ -82,6 +82,8 @@ show_summary() {
     echo -e "  Timezone / Locale:          ${TIMEZONE} / ${LOCALE}"
     echo -e "  Target Hostname:            ${HOSTNAME}"
     echo -e "  Primary User:               ${USERNAME}"
+    echo -e "  User Password:              $([[ -n "${USER_PASSWORD:-}" ]] && echo "[Configured]" || echo "[Not Set - Will prompt in chroot]")"
+    echo -e "  Root Password:              $([[ -n "${ROOT_PASSWORD:-}" ]] && echo "[Configured]" || echo "[Not Set - Will prompt in chroot]")"
     echo -e "  Desktop Environment:        ${CLR_BOLD}${DESKTOP_ENV:-bspwm}${CLR_RESET}"
     echo -e "  Display Manager:            ${CLR_BOLD}${DISPLAY_MANAGER}${CLR_RESET}"
     echo -e "  Terminal Emulator:          ${TERMINAL}"
@@ -99,7 +101,7 @@ run_interactive_wizard() {
     # ----------------------------------------------------------------------
     # 1. Target Disk Selection (Single Disk vs All Disks)
     # ----------------------------------------------------------------------
-    echo -e "\n${CLR_STEP}--> [1/3] Storage Target Layout Selection${CLR_RESET}"
+    echo -e "\n${CLR_STEP}--> [1/4] Storage Target Layout Selection${CLR_RESET}"
     echo -e "Detected Storage Devices (${DETECTED_DISK_COUNT} found):"
     for i in "${!DETECTED_DISK_DETAILS[@]}"; do
         echo -e "  [$((i + 1))] ${DETECTED_DISK_DETAILS[$i]}"
@@ -146,7 +148,7 @@ run_interactive_wizard() {
     # ----------------------------------------------------------------------
     # 2. Partition Scheme & Filesystem Selection
     # ----------------------------------------------------------------------
-    echo -e "\n${CLR_STEP}--> [2/3] Partition Scheme & Filesystem Selection${CLR_RESET}"
+    echo -e "\n${CLR_STEP}--> [2/4] Partition Scheme & Filesystem Selection${CLR_RESET}"
     echo -e "Select partition scheme and filesystem for root:"
     echo -e "  ${CLR_BOLD}1) btrfs${CLR_RESET} (Default) - Subvolumes (@, @home, @snapshots), zstd compression, snapshots"
     echo -e "  ${CLR_BOLD}2) ext4${CLR_RESET}          - Standard Linux filesystem (rock-solid, mature, journaling)"
@@ -189,7 +191,7 @@ run_interactive_wizard() {
     # ----------------------------------------------------------------------
     # 3. Desktop Environment & Display Manager Selection
     # ----------------------------------------------------------------------
-    echo -e "\n${CLR_STEP}--> [3/3] Desktop Environment & Display Manager Selection${CLR_RESET}"
+    echo -e "\n${CLR_STEP}--> [3/4] Desktop Environment & Display Manager Selection${CLR_RESET}"
     echo -e "Select graphical desktop interface:"
     echo -e "  ${CLR_BOLD}1) bspwm${CLR_RESET} - Minimalist tiling window manager + LightDM display manager + Polybar + Rofi + Dunst"
     echo -e "  ${CLR_BOLD}2) gnome${CLR_RESET} - Modern full-featured GNOME desktop environment + GDM display manager"
@@ -211,6 +213,69 @@ run_interactive_wizard() {
         WM="bspwm"
         DISPLAY_MANAGER="lightdm"
         log_info "Selected Desktop: BSPWM (Display Manager: LightDM)"
+    fi
+
+    # ----------------------------------------------------------------------
+    # 4. User Account & Password Provisioning
+    # ----------------------------------------------------------------------
+    echo -e "\n${CLR_STEP}--> [4/4] User Account & Administrative Credentials${CLR_RESET}"
+    read -rp "Enter username [Default: ${USERNAME:-archie}]: " INPUT_USERNAME
+    USERNAME="${INPUT_USERNAME:-${USERNAME:-archie}}"
+    log_info "Target username configured: ${USERNAME}"
+
+    if [[ -z "${USER_PASSWORD:-}" ]]; then
+        echo -e "Enter password for user '${CLR_BOLD}${USERNAME}${CLR_RESET}':"
+        while true; do
+            read -rsp "Password: " _pw1
+            echo ""
+            if [[ -z "$_pw1" ]]; then
+                log_warn "Password cannot be empty. Please enter a valid password."
+                continue
+            fi
+            read -rsp "Confirm Password: " _pw2
+            echo ""
+            if [[ "$_pw1" == "$_pw2" ]]; then
+                USER_PASSWORD="$_pw1"
+                log_success "Password for user '${USERNAME}' established."
+                break
+            else
+                log_error "Passwords do not match. Please try again."
+            fi
+        done
+    else
+        log_info "User password already configured via environment / config.env."
+    fi
+
+    if [[ -z "${ROOT_PASSWORD:-}" ]]; then
+        if [[ -n "${USER_PASSWORD:-}" ]]; then
+            read -rp "Use the same password for root administrative account? [Y/n]: " SAME_PASS_CHOICE
+            if [[ ! "${SAME_PASS_CHOICE}" =~ ^[Nn]$ ]]; then
+                ROOT_PASSWORD="${USER_PASSWORD}"
+                log_success "Root password configured to match user password."
+            fi
+        fi
+        if [[ -z "${ROOT_PASSWORD:-}" ]]; then
+            echo -e "Enter administrative password for '${CLR_BOLD}root${CLR_RESET}':"
+            while true; do
+                read -rsp "Root Password: " _rpw1
+                echo ""
+                if [[ -z "$_rpw1" ]]; then
+                    log_warn "Root password cannot be empty. Please enter a valid password."
+                    continue
+                fi
+                read -rsp "Confirm Root Password: " _rpw2
+                echo ""
+                if [[ "$_rpw1" == "$_rpw2" ]]; then
+                    ROOT_PASSWORD="$_rpw1"
+                    log_success "Root administrative password established."
+                    break
+                else
+                    log_error "Passwords do not match. Please try again."
+                fi
+            done
+        fi
+    else
+        log_info "Root password already configured via environment / config.env."
     fi
     echo -e "${CLR_STEP}----------------------------------------------------------------------${CLR_RESET}\n"
 }
@@ -266,6 +331,34 @@ main() {
                 MEDIA_PLAYER="$2"
                 shift 2
                 ;;
+            --username|-u)
+                USERNAME="$2"
+                shift 2
+                ;;
+            --user-password|--password|-p)
+                USER_PASSWORD="$2"
+                shift 2
+                ;;
+            --root-password)
+                ROOT_PASSWORD="$2"
+                shift 2
+                ;;
+            --hostname)
+                HOSTNAME="$2"
+                shift 2
+                ;;
+            --timezone)
+                TIMEZONE="$2"
+                shift 2
+                ;;
+            --locale)
+                LOCALE="$2"
+                shift 2
+                ;;
+            --shell)
+                DEFAULT_SHELL="$2"
+                shift 2
+                ;;
             --help|-h)
                 echo "Usage: $0 [OPTIONS]"
                 echo ""
@@ -279,6 +372,13 @@ main() {
                 echo "  --desktop <bspwm|gnome>    : Choose desktop environment"
                 echo "  --display-manager <dm>     : Choose display manager (lightdm, gdm)"
                 echo "  --media-player <player>    : Choose default media player (vlc)"
+                echo "  --username, -u <name>      : Specify primary user account (default: archie)"
+                echo "  --user-password, -p <pass> : Specify user password"
+                echo "  --root-password <pass>     : Specify root administrative password"
+                echo "  --hostname <name>          : Specify target system hostname"
+                echo "  --timezone <zone>          : Specify target timezone (e.g. UTC, America/New_York)"
+                echo "  --locale <locale>          : Specify system locale (e.g. en_US.UTF-8)"
+                echo "  --shell <bash|fish>        : Specify default login shell"
                 echo "  --help, -h                 : Show this help message"
                 exit 0
                 ;;
@@ -321,11 +421,27 @@ main() {
     # Persist the final configuration into hardware profile
     save_hardware_profile "${SCRIPT_DIR}/hardware.env"
 
+    # Stage installation credentials securely (chmod 600) for chroot propagation
+    local creds_file="${SCRIPT_DIR}/credentials.env"
+    if [[ -n "${USER_PASSWORD:-}" || -n "${ROOT_PASSWORD:-}" || -n "${USERNAME:-}" ]]; then
+        (
+            umask 077
+            cat <<EOF > "${creds_file}"
+# Temporary deployment credentials (auto-deleted post-chroot)
+USERNAME="${USERNAME:-archie}"
+USER_PASSWORD="${USER_PASSWORD:-}"
+ROOT_PASSWORD="${ROOT_PASSWORD:-}"
+EOF
+        )
+        chmod 600 "${creds_file}" 2>/dev/null || true
+    fi
+
     show_summary
 
     if [[ "${DRY_RUN:-0}" == "1" ]]; then
         log_info "DRY-RUN mode enabled. Simulating execution without destructive disk actions."
         "${SCRIPT_DIR}/stage1_disk_base.sh"
+        rm -f "${creds_file}" 2>/dev/null || true
         local py_bin="python3"
         if ! command -v python3 >/dev/null 2>&1; then
             if command -v python >/dev/null 2>&1; then
@@ -341,6 +457,7 @@ main() {
     echo ""
     read -rp "Do you wish to start the installation with these specifications? [y/N]: " PROCEED
     if [[ ! "${PROCEED}" =~ ^[Yy]$ ]]; then
+        rm -f "${creds_file}" 2>/dev/null || true
         log_warn "Installation aborted by user."
         exit 0
     fi
@@ -355,7 +472,8 @@ main() {
     # Stage 2: Post-Chroot Configuration
     # --------------------------------------------------------------------------
     log_step "Executing Stage 2: Post-Chroot Configuration"
-    arch-chroot /mnt /opt/arch_installer/stage2_chroot.sh
+    USERNAME="${USERNAME:-archie}" USER_PASSWORD="${USER_PASSWORD:-}" ROOT_PASSWORD="${ROOT_PASSWORD:-}" arch-chroot /mnt /opt/arch_installer/stage2_chroot.sh
+    rm -f "${creds_file}" "/mnt/opt/arch_installer/credentials.env" 2>/dev/null || true
 
     # --------------------------------------------------------------------------
     # Completion & Post-Install Guidance

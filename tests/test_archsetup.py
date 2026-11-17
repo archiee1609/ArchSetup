@@ -431,6 +431,9 @@ def run_tests():
         report("stage2 installs shells (bash, fish)", "bash" in stage2_content and "fish" in stage2_content)
         report("stage2 installs Alacritty terminal", "alacritty" in stage2_content)
         report("stage2 installs Thunar file manager for BSPWM", "thunar" in stage2_content)
+        report("stage2 supports root and user password via chpasswd", "echo \"root:${ROOT_PASSWORD" in stage2_content and "echo \"${USERNAME}:${USER_PASSWORD" in stage2_content)
+        report("stage2 sources credentials.env if present", "credentials.env" in stage2_content)
+        report("stage2 cleans up credentials.env post provisioning", "credentials.env" in stage2_content and "rm -f" in stage2_content)
 
     # ------------------------------------------------------------------------------
     # 11. Testing Hardware Auto-Detection & Specification Recognition
@@ -577,6 +580,8 @@ adapter = ADP1
         report("Hardware profile defines DESKTOP_ENV", "DESKTOP_ENV=\"gnome\"" in hw_content)
         report("Hardware profile defines DISPLAY_MANAGER", "DISPLAY_MANAGER=\"gdm\"" in hw_content)
         report("Hardware profile defines MEDIA_PLAYER", "MEDIA_PLAYER=" in hw_content)
+        report("Hardware profile defines USERNAME", "USERNAME=" in hw_content)
+        report("Hardware profile defines DEFAULT_SHELL", "DEFAULT_SHELL=" in hw_content)
         report("Hardware profile defines KMS_MODULES", "KMS_MODULES=" in hw_content)
         report("Hardware profile defines GRAPHICS_PACKAGES", "GRAPHICS_PACKAGES=" in hw_content)
     finally:
@@ -643,6 +648,9 @@ adapter = ADP1
     report("install.sh --help documents --fs", "--fs" in inst_help.stdout)
     report("install.sh --help documents --desktop", "--desktop" in inst_help.stdout)
     report("install.sh --help documents --media-player", "--media-player" in inst_help.stdout)
+    report("install.sh --help documents --username", "--username" in inst_help.stdout)
+    report("install.sh --help documents --user-password", "--user-password" in inst_help.stdout)
+    report("install.sh --help documents --root-password", "--root-password" in inst_help.stdout)
 
     print(f"\n{BLUE}======================================================================{RESET}")
     print(f"Test Results: {GREEN}{passed_count} Passed{RESET}, {RED if failed_count else GREEN}{failed_count} Failed{RESET}")

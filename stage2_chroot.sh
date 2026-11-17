@@ -41,6 +41,11 @@ if [[ -f "${SCRIPT_DIR}/config.env" ]]; then
     source "${SCRIPT_DIR}/config.env"
 fi
 
+if [[ -f "${SCRIPT_DIR}/credentials.env" ]]; then
+    # shellcheck source=credentials.env
+    source "${SCRIPT_DIR}/credentials.env"
+fi
+
 # Load pre-detected hardware profile if available, or probe directly
 if [[ -f "${SCRIPT_DIR}/hardware.env" ]]; then
     # shellcheck source=hardware.env
@@ -79,7 +84,7 @@ log_step "Configuring Timezone, Clock & Localization"
 
 log_info "Setting timezone to ${TIMEZONE}..."
 ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
-hwclock --systohc
+hwclock --systohc 2>/dev/null || true
 
 log_info "Configuring locale (${LOCALE})..."
 sed -i "s/^#\(${LOCALE}\)/\1/" /etc/locale.gen
@@ -135,14 +140,18 @@ if [[ "${ENABLE_CHAOTIC_AUR:-true}" == "true" ]]; then
     pacman -U --noconfirm --needed 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst' 2>/dev/null || true
     pacman -U --noconfirm --needed 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst' 2>/dev/null || true
 
-    if ! grep -q "^\[chaotic-aur\]" /etc/pacman.conf; then
-        cat <<EOF >> /etc/pacman.conf
+    if [[ -f /etc/pacman.d/chaotic-mirrorlist ]]; then
+        if ! grep -q "^\[chaotic-aur\]" /etc/pacman.conf; then
+            cat <<EOF >> /etc/pacman.conf
 
 [chaotic-aur]
 Include = /etc/pacman.d/chaotic-mirrorlist
 EOF
+        fi
+        log_success "Chaotic-AUR repository configured in /etc/pacman.conf."
+    else
+        log_warn "Chaotic-AUR mirrorlist not downloaded; skipping Chaotic-AUR repository in /etc/pacman.conf to preserve pacman stability."
     fi
-    log_success "Chaotic-AUR repository configured in /etc/pacman.conf."
 fi
 
 # Refresh pacman package databases
@@ -576,11 +585,19 @@ log_step "Provisioning User (${USERNAME}) and Privileges"
 
 # Set root password
 log_info "Setting root password..."
-if [[ -n "${ROOT_PASSWORD}" ]]; then
+if [[ -n "${ROOT_PASSWORD:-}" ]]; then
     echo "root:${ROOT_PASSWORD}" | chpasswd
+    log_success "Root administrative password configured successfully."
 else
     echo "Enter root password:"
-    passwd root
+    while true; do
+        if passwd root; then
+            log_success "Root password configured."
+            break
+        else
+            log_warn "Password setting failed. Please try again."
+        fi
+    done
 fi
 
 # Ensure bash and fish are registered in /etc/shells
@@ -598,21 +615,49 @@ elif command -v "${DEFAULT_SHELL:-bash}" >/dev/null 2>&1; then
     USER_SHELL="$(command -v "${DEFAULT_SHELL:-bash}")"
 fi
 
+# Determine available supplementary user groups
+_VALID_GROUPS=()
+for _g in wheel video audio input storage optical users; do
+    if getent group "$_g" >/dev/null 2>&1 || grep -q "^${_g}:" /etc/group 2>/dev/null; then
+        if [[ "$_g" != "users" ]]; then
+            _VALID_GROUPS+=("$_g")
+        fi
+    fi
+done
+_GROUP_ARG=""
+if [[ ${#_VALID_GROUPS[@]} -gt 0 ]]; then
+    _GROUP_ARG="-G $(IFS=,; echo "${_VALID_GROUPS[*]}")"
+fi
+
 # Create non-root user
 if ! id "${USERNAME}" > /dev/null 2>&1; then
     log_info "Creating user '${USERNAME}' with shell '${USER_SHELL}'..."
-    useradd -m -g users -G wheel,video,audio,input,storage,optical -s "${USER_SHELL}" "${USERNAME}"
+    # shellcheck disable=SC2086
+    useradd -m -g users ${_GROUP_ARG} -s "${USER_SHELL}" "${USERNAME}"
 else
     log_info "Updating user '${USERNAME}' shell to '${USER_SHELL}'..."
     usermod -s "${USER_SHELL}" "${USERNAME}"
 fi
 
 log_info "Setting password for user '${USERNAME}'..."
-if [[ -n "${USER_PASSWORD}" ]]; then
+if [[ -n "${USER_PASSWORD:-}" ]]; then
     echo "${USERNAME}:${USER_PASSWORD}" | chpasswd
+    log_success "Password for user '${USERNAME}' configured successfully."
 else
     echo "Enter password for user '${USERNAME}':"
-    passwd "${USERNAME}"
+    while true; do
+        if passwd "${USERNAME}"; then
+            log_success "Password for '${USERNAME}' configured."
+            break
+        else
+            log_warn "Password setting failed. Please try again."
+        fi
+    done
+fi
+
+# Clean up secure credentials file immediately post password provisioning
+if [[ -f "${SCRIPT_DIR}/credentials.env" ]]; then
+    shred -u "${SCRIPT_DIR}/credentials.env" 2>/dev/null || rm -f "${SCRIPT_DIR}/credentials.env"
 fi
 
 # Enable sudo for wheel group
